@@ -87,3 +87,45 @@ def make_df_validator_nospoilers(
         return True, ["Nice — your output matches the expected result ✅"]
 
     return validator
+
+
+def check_process_rules(sql: str, *, require=None, forbid=None) -> tuple[bool, list[str]]:
+    require = require or []
+    forbid = forbid or []
+    s = " ".join(sql.lower().split())
+
+    def has(token: str) -> bool:
+        if token == "where": return "where" in s
+        if token == "join": return " join " in s
+        if token == "group_by": return "group by" in s
+        if token == "having": return "having" in s
+        if token == "distinct": return "distinct" in s
+        if token == "order_by": return "order by" in s
+        if token == "limit": return "limit" in s
+        if token == "subquery": return "(select" in s
+        raise KeyError(token)
+
+    messages = {
+        "where": "Use a WHERE clause.",
+        "join": "Use a JOIN in this exercise.",
+        "group_by": "Use GROUP BY in this exercise.",
+        "having": "Use HAVING in this exercise.",
+        "distinct": "Use DISTINCT in this exercise.",
+        "order_by": "Don’t use ORDER BY for this exercise.",
+        "limit": "Don’t use LIMIT for this exercise.",
+        "subquery": "Don’t use subqueries for this exercise.",
+    }
+
+    unknown = [t for t in set(require) | set(forbid) if t not in messages]
+    if unknown:
+        return False, [f"Internal error: unknown process rule(s): {unknown}"]
+
+    for t in require:
+        if not has(t):
+            return False, [messages[t]]
+
+    for t in forbid:
+        if has(t):
+            return False, [messages[t]]
+
+    return True, []
