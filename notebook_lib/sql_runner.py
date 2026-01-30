@@ -192,6 +192,23 @@ def make_sql_runner(
           background: #eaeef2 !important;
         }
 
+        /* =========================
+        Prevent cell text from overlapping other columns
+        (clip + ellipsis)
+        ========================= */
+        .sql-runner table.dataframe{
+        width: 100% !important;
+        table-layout: fixed !important;   /* fixed column widths so overflow is handled per-cell */
+        }
+
+        .sql-runner table.dataframe th,
+        .sql-runner table.dataframe td{
+        overflow: hidden !important;
+        text-overflow: ellipsis !important;
+        white-space: nowrap !important;   /* keep single-line cells */
+        }
+
+
 
 
         /* =========================
