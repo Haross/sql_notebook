@@ -26,16 +26,25 @@ SUCCESS_MESSAGES = [
     "👏 Nicely done",
 ]
 
-# Inject CSS only once per kernel/runtime (prevents 20x duplicated <style> blocks)
-_CSS_INJECTED = False
-
-
 def _inject_css_once(css: str) -> None:
-    global _CSS_INJECTED
-    if _CSS_INJECTED:
-        return
-    display(HTML(f"<style>{css}</style>"))
-    _CSS_INJECTED = True
+    """
+    Colab sometimes drops <style> that are emitted into an output area.
+    So we inject into document.head via JS (persisting across cells).
+    """
+    js = f"""
+    <script>
+    (function() {{
+      const id = "sql-runner-css";
+      if (document.getElementById(id)) return;
+      const style = document.createElement("style");
+      style.id = id;
+      style.type = "text/css";
+      style.appendChild(document.createTextNode({css!r}));
+      document.head.appendChild(style);
+    }})();
+    </script>
+    """
+    display(HTML(js))
 
 
 def make_sql_runner(
