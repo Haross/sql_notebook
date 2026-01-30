@@ -193,20 +193,40 @@ def make_sql_runner(
         }
 
         /* =========================
-        Prevent cell text from overlapping other columns
-        (clip + ellipsis)
+        DataFrame sizing + no overlap (no full-width stretch)
         ========================= */
+
+        /* Let the table size to its content, but don't exceed container */
         .sql-runner table.dataframe{
-        width: 100% !important;
-        table-layout: fixed !important;   /* fixed column widths so overflow is handled per-cell */
+        width: auto !important;
+        max-width: 100% !important;
+
+        /* Keep column widths stable so overflow is handled per-cell */
+        table-layout: fixed !important;
+
+        /* Important when using width:auto + fixed layout */
+        display: inline-block !important;
+        overflow-x: auto !important;   /* if it still gets too wide, allow scroll */
+        vertical-align: top;
         }
 
+        /* Stop text painting over other columns */
         .sql-runner table.dataframe th,
         .sql-runner table.dataframe td{
         overflow: hidden !important;
         text-overflow: ellipsis !important;
-        white-space: nowrap !important;   /* keep single-line cells */
+        white-space: nowrap !important;
         }
+
+        /* Fix "everything is right aligned" coming from notebook theme CSS */
+        .sql-runner table.dataframe th,
+        .sql-runner table.dataframe td{
+        text-align: left !important;
+        }
+
+        .sql-runner table.dataframe th{ text-align:left !important; }
+
+
 
 
 
