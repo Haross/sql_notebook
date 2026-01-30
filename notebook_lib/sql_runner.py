@@ -226,7 +226,9 @@ def make_sql_runner(
 
         .sql-runner table.dataframe th{ text-align:left !important; }
 
-
+        .sql-runner table.dataframe td{
+        white-space: pre !important;
+        }
 
 
 
