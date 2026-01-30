@@ -817,6 +817,13 @@ def make_sql_runner(
                 for t in tables:
                     info = pd.read_sql_query(f"PRAGMA table_info('{t}');", conn)
                     info = info[["name", "type", "notnull", "dflt_value", "pk"]]
+                    info = info.rename(columns={
+                            "name": "attribute",
+                            "type": "datatype",
+                            "notnull": "not null",
+                            "dflt_value": "default value",
+                            "pk": "primary key"
+                        })
 
                     out = widgets.Output()
                     with out:
