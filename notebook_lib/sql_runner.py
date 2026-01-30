@@ -132,19 +132,17 @@ def make_sql_runner(
     color: var(--sr-text) !important;
     }
 
-    /* Dark mode overrides */
-    @media (prefers-color-scheme: dark){
-    .sql-runner{
-        --sr-bg:        transparent;
-        --sr-surface:   #111418;
-        --sr-surface2:  #161b22;
-        --sr-border:    #2b313b;
-        --sr-border2:   #222834;
-        --sr-text:      #e6edf3;
-        --sr-muted:     #9aa7b4;
-        --sr-accent:    #4da3ff;
-    }
-    }
+/* Dark theme — follows Colab html[theme="dark"] */
+html[theme="dark"] .sql-runner{
+  --sr-surface:   #111418;
+  --sr-surface2:  #161b22;
+  --sr-border:    #2b313b;
+  --sr-border2:   #222834;
+  --sr-text:      #e6edf3;
+  --sr-muted:     #9aa7b4;
+  --sr-accent:    #4da3ff;
+}
+
 
     /* Ensure inner widget containers don't exceed runner width */
     .sql-runner .widget-box,
