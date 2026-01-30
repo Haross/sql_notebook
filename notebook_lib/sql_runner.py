@@ -16,10 +16,14 @@ from IPython.display import display, clear_output, HTML
 # Small constants missing in the notebook snippet
 # -------------------------------------------------------------------
 SUCCESS_MESSAGES = [
-    "✅ Correct!",
-    "🎉 Nice work!",
-    "🌟 You got it!",
-    "💪 Great job!",
+    "👏 Nice!",
+    "💪 Great job",
+    "👏 Good job",
+    "👏 Keep up the good work!",
+    "👏 I think you’re getting the hang of this!",
+    "👏 Well played",
+    "🌟 Fantastic! Let’s keep it going",
+    "👏 Nicely done",
 ]
 
 # Inject CSS only once per kernel/runtime (prevents 20x duplicated <style> blocks)

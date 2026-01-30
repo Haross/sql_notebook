@@ -53,7 +53,7 @@ def make_df_validator_nospoilers(
 ):
     required_cols = required_cols or []
 
-    def validator(df: pd.DataFrame):
+    def validator(sql: str, df: pd.DataFrame, conn ):
         problems = []
         structural_issue = False
 
