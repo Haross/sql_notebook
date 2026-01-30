@@ -105,495 +105,462 @@ def make_sql_runner(
 
     # ---------- UI chrome (CSS) ----------
     CSS = r"""
-/* =========================
-          Dark-theme safety (Colab): keep runner readable
-          ========================= */
-        .sql-runner, .sql-runner *{
-          color: #24292f !important;
-        }
-
-        /* Textarea: force readable text + placeholder */
-        .sql-runner .sql-editor textarea{
-          background: #ffffff !important;
-          color: #24292f !important;
-          caret-color: #24292f !important;
-        }
-        .sql-runner .sql-editor textarea::placeholder{
-          color: #57606a !important;
-          opacity: 1 !important;
-        }
-
-        /* Output containers: prevent dark blocks behind content (esp. schema accordion) */
-        .sql-runner .widget-output,
-        .sql-runner .output,
-        .sql-runner .output_area,
-        .sql-runner .jp-OutputArea,
-        .sql-runner .jp-OutputArea-output,
-        .sql-runner .jp-RenderedHTMLCommon,
-        .sql-runner .jp-OutputArea-child,
-        .sql-runner .output_subarea,
-        .sql-runner .output_html{
-          background: #ffffff !important;
-        }
-
-        /* =========================
-          Fix pandas Styler tables in Colab dark theme
-          ========================= */
-        .sql-runner table.dataframe,
-        .sql-runner .output table,
-        .sql-runner .jp-RenderedHTMLCommon table{
-          background: #ffffff !important;
-          color: #24292f !important;
-          border-collapse: collapse !important;
-        }
-
-        .sql-runner table.dataframe thead th,
-        .sql-runner .output thead th,
-        .sql-runner .jp-RenderedHTMLCommon thead th{
-          background: #f6f8fa !important;
-          color: #24292f !important;
-          border: 1px solid #d0d7de !important;
-        }
-
-        .sql-runner table.dataframe tbody td,
-        .sql-runner .output tbody td,
-        .sql-runner .jp-RenderedHTMLCommon tbody td{
-          background: #ffffff !important;
-          color: #24292f !important;
-          border: 1px solid #eaeef2 !important;
-        }
-
-        /* kill dark zebra striping some themes apply */
-        .sql-runner table.dataframe tbody tr:nth-child(even) td,
-        .sql-runner .output tbody tr:nth-child(even) td,
-        .sql-runner .jp-RenderedHTMLCommon tbody tr:nth-child(even) td{
-          background: #ffffff !important;
-        }
-
-        /* =========================
-          Accordion (Schema) header styling
-          ========================= */
-        .sql-runner .p-Accordion .p-Collapse-header{
-          background: #f6f8fa !important;
-          border: 1px solid #d0d7de !important;
-          border-radius: 8px !important;
-        }
-        .sql-runner .p-Accordion .p-Collapse-header i,
-        .sql-runner .p-Accordion .p-Collapse-header span{
-          color: #24292f !important;
-        }
-        .sql-runner .p-Accordion .p-Collapse-contents{
-          background: #ffffff !important;
-          border: 1px solid #d0d7de !important;
-          border-top: 0 !important;
-          border-radius: 0 0 8px 8px !important;
-        }
-        .sql-runner .p-Accordion .p-Collapse-header:hover{
-          background: #eaeef2 !important;
-        }
-
-        /* =========================
-        DataFrame sizing + no overlap (no full-width stretch)
-        ========================= */
-
-        /* Let the table size to its content, but don't exceed container */
-        .sql-runner table.dataframe{
-        width: auto !important;
-        max-width: 100% !important;
-
-        /* Keep column widths stable so overflow is handled per-cell */
-        table-layout: fixed !important;
-
-        /* Important when using width:auto + fixed layout */
-        display: inline-block !important;
-        overflow-x: auto !important;   /* if it still gets too wide, allow scroll */
-        vertical-align: top;
-        }
-
-        /* Stop text painting over other columns */
-        .sql-runner table.dataframe th,
-        .sql-runner table.dataframe td{
-        overflow: hidden !important;
-        text-overflow: ellipsis !important;
-        white-space: nowrap !important;
-        }
-
-        /* Fix "everything is right aligned" coming from notebook theme CSS */
-        .sql-runner table.dataframe th,
-        .sql-runner table.dataframe td{
-        text-align: left !important;
-        }
-
-        .sql-runner table.dataframe th{ text-align:left !important; }
-
-        .sql-runner table.dataframe td{
-        white-space: pre !important;
-        }
-
-
-
-
-        /* =========================
-          Global runner bounds
-          ========================= */
-        .sql-runner{
-          max-width: 100% !important;
-          box-sizing: border-box !important;
-          padding-right: 18px;   /* keep resize handle away from notebook scrollbar */
-          padding-bottom: 12px;
-          overflow-x: hidden;
-        }
-
-        .sql-runner .widget-box,
-        .sql-runner .widget-vbox,
-        .sql-runner .widget-hbox{
-          width: 100% !important;
-          max-width: 100% !important;
-          box-sizing: border-box !important;
-        }
-
-        /* =========================
-          Description / Hint boxes
-          ========================= */
-        .sql-desc{
-          border-left: 4px solid #1a73e8;
-          background: #f5f9ff;
-          padding: 10px 12px;
-          margin: 6px 0 10px 0;
-          border-radius: 6px;
-          font-size: 14px;
-          line-height: 1.5;
-        }
-        .sql-hintbox{
-          border-left: 4px solid #fbbc04;
-          background: #fff8e1;
-          padding: 10px 12px;
-          margin: 8px 0 10px 0;
-          border-radius: 6px;
-          font-size: 14px;
-          line-height: 1.5;
-        }
-
-        /* =========================
-          Solution box
-          ========================= */
-        .sql-solbox{
-          position: relative;
-          border-left: 4px solid #2e7d32;
-          background: #e8f5e9;
-          padding: 10px 12px;
-          margin: 8px 0 10px 0;
-          border-radius: 6px;
-          font-size: 13px;
-          line-height: 1.5;
-        }
-        .sql-solbox pre{
-          margin: 8px 0 0 0;
-          padding: 10px;
-          background: #ffffff;
-          border: 1px solid #d0d7de;
-          border-radius: 8px;
-          overflow: auto;
-          white-space: pre-wrap;
-        }
-
-        .sql-sol-close{
-          padding: 0 !important;
-          border: 0 !important;
-          background: transparent !important;
-          box-shadow: none !important;
-          color: #24292f !important;
-          opacity: 0.65 !important;
-          font-weight: 700 !important;
-        }
-
-        .sql-sol-close:hover{
-          opacity: 1 !important;
-          background: transparent !important;
-        }
-
-
-
-        /* =========================
-          Editor + toolbar panel
-          ========================= */
-        .sql-runner .sql-panel{
-          border: 1px solid #d0d7de;
-          border-radius: 12px;
-          background: #f6f8fa;
-          overflow: hidden;
-        }
-
-        /* Textarea wrapper adapts to resized textarea */
-        .sql-runner .widget-textarea{
-          height: auto !important;
-        }
-
-        /* Base textarea behavior (resizable) */
-        .sql-runner .widget-textarea textarea{
-          height: 95px;                 /* initial size */
-          min-height: 120px !important;
-          resize: vertical !important;
-          width: 100% !important;
-          max-width: 100% !important;
-          box-sizing: border-box !important;
-        }
-
-        /* Editor look */
-        .sql-runner .sql-editor textarea{
-          background: #ffffff;
-          border: 0 !important;          /* panel provides border */
-          border-radius: 0 !important;
-          padding: 12px !important;
-          font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-          font-size: 13px;
-          line-height: 1.4;
-        }
-
-        /* Toolbar */
-        .sql-runner .sql-toolbar{
-          border-top: 1px solid #d0d7de;
-          background: #f6f8fa;
-          margin: 0 !important;
-          padding: 6px 10px !important;
-        }
-
-        .sql-runner .sql-toolbar .widget-button{
-          min-width: 40px !important;
-          width: 40px !important;
-          height: 40px !important;
-          border-radius: 8px !important;
-          font-size: 18px !important;
-
-          background: transparent !important;
-          border: 1px solid transparent !important;
-          box-shadow: none !important;
-          color: #24292f !important;
-        }
-        /* Override the square toolbar button sizing for the solution toggle */
-        .sql-runner .sql-toolbar .widget-button.sql-sol-toggle{
-          width: auto !important;
-          min-width: unset !important;
-          padding: 0 14px !important;
-          border-radius: 999px !important;
-          font-size: 12px !important;
-        }
-        .sql-runner .sql-toolbar .widget-button:hover{
-          background: #eaeef2 !important;
-          border-color: #d0d7de !important;
-        }
-        .sql-runner .sql-toolbar .widget-button.mod-primary{
-          background: #1a73e8 !important;
-          border-color: #1a73e8 !important;
-          color: #ffffff !important;
-        }
-        .sql-runner .sql-toolbar .widget-button.mod-primary:hover{
-          filter: brightness(0.95);
-        }
-
-        .sql-runner .sql-toolbar .hint{
-          color: #57606a;
-          font-size: 12px;
-          margin-left: 12px;
-        }
-
-        .sql-sol-toggle{
-          padding: 0 10px !important;
-          font-size: 12px !important;
-          border-radius: 999px !important;
-          background: #ffffff !important;
-          border: 1px dashed #2e7d32 !important;
-          color: #2e7d32 !important;
-          font-weight: 500 !important;
-        }
-
-        .sql-sol-toggle:hover{
-          background: #e8f5e9 !important;
-        }
-
-        /* =========================
-          Tabs results panel (dock)
-          ========================= */
-
-        .sql-runner .sql-tabs-panel{
-          border: 1px solid #d0d7de;
-          border-radius: 10px;
-          background: #ffffff;
-          overflow: hidden;
-        }
-
-        /* Remove default focus rings */
-        .sql-runner .widget-tab:focus,
-        .sql-runner .widget-tab :focus{
-          outline: none !important;
-          box-shadow: none !important;
-        }
-
-        /* Let outer panel own the border */
-        .sql-runner .sql-tabs-panel .widget-tab{
-          border: 0 !important;
-          background: transparent !important;
-        }
-
-        /* Tab bar */
-        .sql-runner .widget-tab > .p-TabBar{
-          background: #f6f8fa !important;
-          border-bottom: 1px solid #d0d7de !important;
-          padding: 0 6px !important;
-        }
-
-        /* Tabs */
-        .sql-runner .p-TabBar-tab{
-          margin: 0 6px 0 0 !important;
-          padding: 6px 12px !important;
-          font-size: 13px !important;
-          line-height: 18px !important;
-          color: #57606a !important;
-
-          background: transparent !important;
-          border: 1px solid transparent !important;
-          border-bottom: 0 !important;
-          border-radius: 8px 8px 0 0 !important;
-
-          position: relative; /* for ::after indicator */
-        }
-
-        .sql-runner .p-TabBar-tab:hover{
-          background: #eaeef2 !important;
-          border-color: #d0d7de !important;
-        }
-
-        /* Active tab */
-        .sql-runner .p-TabBar-tab.p-mod-current{
-          background: #ffffff !important;
-          color: #24292f !important;
-          border-color: #d0d7de !important;
-          border-bottom: 1px solid #ffffff !important; /* merges into content */
-          font-weight: 500 !important;
-          z-index: 2;
-        }
-
-        /* Blue indicator INSIDE the tab (prevents "blue line below") */
-        .sql-runner .p-TabBar-tab.p-mod-current::after{
-          content: "";
-          position: absolute;
-          left: 12px;
-          right: 12px;
-          bottom: 4px;      /* <-- inside the tab; NOT -1px */
-          height: 2px;
-          background: #1a73e8;
-          border-radius: 2px;
-        }
-
-        /* Tab content */
-        .sql-runner .widget-tab > .p-TabPanel{
-          padding: 10px !important;
-          background: #ffffff !important;
-        }
-
-
-        /* --- HARD OVERRIDES: remove Lumino/Colab active-tab blue indicator --- */
-        .sql-runner .p-TabBar-tab.p-mod-current{
-          box-shadow: none !important;      /* Lumino often draws the blue line here */
-          background-image: none !important;
-        }
-
-        /* Some themes use ::before as the underline */
-        .sql-runner .p-TabBar-tab.p-mod-current::before{
-          content: none !important;
-          display: none !important;
-        }
-
-        /* Some themes apply focus-visible outline/underline */
-        .sql-runner .p-TabBar-tab:focus-visible,
-        .sql-runner .p-TabBar-tab.p-mod-current:focus-visible{
-          outline: none !important;
-          box-shadow: none !important;
-        }
-
-
-
-        /* =========================
-          Remove Lumino inner divider inside tab contents
-          ========================= */
-        .sql-runner .sql-tabs-panel .widget-tab-contents,
-        .sql-runner .sql-tabs-panel .p-TabPanel-tabContents{
-          border: 0 !important;
-          box-shadow: none !important;
-          outline: none !important;
-          background: transparent !important;
-        }
-
-
-
-
-
-        /* =========================
-          Resizable tabs container (stable)
-          ========================= */
-
-        /* Make the OUTER bordered panel resizable */
-        .sql-runner .sql-tabs-panel{
-          resize: vertical;
-          overflow: hidden;          /* important: prevents the tab bar from getting clipped/overlapped */
-          min-height: 220px;         /* prevents collapsing into the tabs */
-        }
-
-        /* Force the Tab widget to use a vertical flex layout */
-        .sql-runner .sql-tabs-panel .widget-tab{
-          height: 100% !important;
-          display: flex !important;
-          flex-direction: column !important;
-        }
-
-        /* Tab bar stays fixed at top */
-        .sql-runner .sql-tabs-panel .widget-tab > .p-TabBar{
-          flex: 0 0 auto !important;
-        }
-
-        /* Tab content area becomes the flexible, scrollable region */
-        .sql-runner .sql-tabs-panel .widget-tab > .p-TabPanel{
-          flex: 1 1 auto !important;
-          overflow: auto !important;
-          min-height: 140px;         /* keeps content area usable even when resized smaller */
-          box-sizing: border-box !important;
-        }
-
-        /* =========================
-          Validation box
-          ========================= */
-        .sql-validation{
-          position: relative;
-          padding: 10px 38px 10px 12px; /* extra right padding for ✕ */
-          margin: 8px 0 10px 0;
-          border-radius: 6px;
-          font-size: 14px;
-          line-height: 1.5;
-        }
-        .sql-validation.ok{
-          border-left: 4px solid #2e7d32;
-          background: #e8f5e9;
-        }
-        .sql-validation.err{
-          border-left: 4px solid #b00020;
-          background: #ffebee;
-        }
-        .sql-validation .close{
-          position: absolute;
-          top: 8px;
-          right: 10px;
-          cursor: pointer;
-          user-select: none;
-          opacity: 0.65;
-          font-weight: 700;
-        }
-        .sql-validation .close:hover{
-          opacity: 1;
-        }
-        .sql-validation ul{
-          margin: 6px 0 0 18px;
-        }
+    /* =========================================================
+    SQL Runner — Theme-aware (Light + Dark)
+    Works well in Colab/JupyterLab without fighting global CSS
+    ========================================================= */
+
+    /* -------------------------
+    Theme tokens (Light default)
+    ------------------------- */
+    .sql-runner{
+    --sr-bg:        transparent;     /* outer background */
+    --sr-surface:   #ffffff;         /* cards/panels */
+    --sr-surface2:  #f6f8fa;         /* headers/toolbars */
+    --sr-border:    #d0d7de;
+    --sr-border2:   #eaeef2;
+    --sr-text:      #24292f;
+    --sr-muted:     #57606a;
+    --sr-accent:    #1a73e8;
+
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+    padding-right: 18px;   /* keep resize handle away from notebook scrollbar */
+    padding-bottom: 12px;
+    overflow-x: hidden;
+
+    color: var(--sr-text) !important;
+    }
+
+    /* Dark mode overrides */
+    @media (prefers-color-scheme: dark){
+    .sql-runner{
+        --sr-bg:        transparent;
+        --sr-surface:   #111418;
+        --sr-surface2:  #161b22;
+        --sr-border:    #2b313b;
+        --sr-border2:   #222834;
+        --sr-text:      #e6edf3;
+        --sr-muted:     #9aa7b4;
+        --sr-accent:    #4da3ff;
+    }
+    }
+
+    /* Ensure inner widget containers don't exceed runner width */
+    .sql-runner .widget-box,
+    .sql-runner .widget-vbox,
+    .sql-runner .widget-hbox{
+    width: 100% !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+    }
+
+    /* -------------------------
+    Output containers: don’t force white slabs
+    ------------------------- */
+    .sql-runner .widget-output,
+    .sql-runner .output,
+    .sql-runner .output_area,
+    .sql-runner .jp-OutputArea,
+    .sql-runner .jp-OutputArea-output,
+    .sql-runner .jp-RenderedHTMLCommon,
+    .sql-runner .jp-OutputArea-child,
+    .sql-runner .output_subarea,
+    .sql-runner .output_html{
+    background: transparent !important;
+    color: var(--sr-text) !important;
+    }
+
+    /* -------------------------
+    Description / Hint / Solution boxes
+    ------------------------- */
+    .sql-desc{
+    border-left: 4px solid var(--sr-accent);
+    background: var(--sr-surface2);
+    color: var(--sr-text);
+    padding: 10px 12px;
+    margin: 6px 0 10px 0;
+    border-radius: 6px;
+    font-size: 14px;
+    line-height: 1.5;
+    }
+
+    .sql-hintbox{
+    border-left: 4px solid #fbbc04;
+    background: var(--sr-surface2);
+    color: var(--sr-text);
+    padding: 10px 12px;
+    margin: 8px 0 10px 0;
+    border-radius: 6px;
+    font-size: 14px;
+    line-height: 1.5;
+    }
+
+    .sql-solbox{
+    position: relative;
+    border-left: 4px solid #2e7d32;
+    background: var(--sr-surface2);
+    color: var(--sr-text);
+    padding: 10px 12px;
+    margin: 8px 0 10px 0;
+    border-radius: 6px;
+    font-size: 13px;
+    line-height: 1.5;
+    }
+
+    .sql-solbox pre{
+    margin: 8px 0 0 0;
+    padding: 10px;
+    background: var(--sr-surface);
+    color: var(--sr-text);
+    border: 1px solid var(--sr-border);
+    border-radius: 8px;
+    overflow: auto;
+    white-space: pre-wrap;
+    }
+
+    .sql-sol-close{
+    padding: 0 !important;
+    border: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    color: var(--sr-text) !important;
+    opacity: 0.65 !important;
+    font-weight: 700 !important;
+    }
+    .sql-sol-close:hover{ opacity: 1 !important; }
+
+    /* -------------------------
+    Editor + toolbar panel
+    ------------------------- */
+    .sql-runner .sql-panel{
+    border: 1px solid var(--sr-border);
+    border-radius: 12px;
+    background: var(--sr-surface2);
+    overflow: hidden;
+    }
+
+    /* Textarea wrapper adapts to resized textarea */
+    .sql-runner .widget-textarea{ height: auto !important; }
+
+    /* Base textarea behavior (resizable) */
+    .sql-runner .widget-textarea textarea{
+    height: 95px;                 /* initial size */
+    min-height: 120px !important;
+    resize: vertical !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+    }
+
+    /* Editor look */
+    .sql-runner .sql-editor textarea{
+    background: var(--sr-surface) !important;
+    color: var(--sr-text) !important;
+    caret-color: var(--sr-text) !important;
+
+    border: 0 !important;          /* panel provides border */
+    border-radius: 0 !important;
+    padding: 12px !important;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    font-size: 13px;
+    line-height: 1.4;
+    }
+    .sql-runner .sql-editor textarea::placeholder{
+    color: var(--sr-muted) !important;
+    opacity: 1 !important;
+    }
+
+    /* Toolbar */
+    .sql-runner .sql-toolbar{
+    border-top: 1px solid var(--sr-border);
+    background: var(--sr-surface2);
+    margin: 0 !important;
+    padding: 6px 10px !important;
+    }
+
+    .sql-runner .sql-toolbar .widget-button{
+    min-width: 40px !important;
+    width: 40px !important;
+    height: 40px !important;
+    border-radius: 8px !important;
+    font-size: 18px !important;
+
+    background: transparent !important;
+    border: 1px solid transparent !important;
+    box-shadow: none !important;
+    color: var(--sr-text) !important;
+    }
+
+    .sql-runner .sql-toolbar .widget-button:hover{
+    background: rgba(127,127,127,0.12) !important;
+    border-color: var(--sr-border) !important;
+    }
+
+    /* Primary Run button */
+    .sql-runner .sql-toolbar .widget-button.mod-primary{
+    background: var(--sr-accent) !important;
+    border-color: var(--sr-accent) !important;
+    color: #ffffff !important;
+    }
+    .sql-runner .sql-toolbar .widget-button.mod-primary:hover{
+    filter: brightness(0.95);
+    }
+
+    .sql-runner .sql-toolbar .hint{
+    color: var(--sr-muted);
+    font-size: 12px;
+    margin-left: 12px;
+    }
+
+    /* Solution toggle button (pill) */
+    .sql-runner .sql-toolbar .widget-button.sql-sol-toggle{
+    width: auto !important;
+    min-width: unset !important;
+    padding: 0 14px !important;
+    border-radius: 999px !important;
+    font-size: 12px !important;
+    }
+
+    .sql-sol-toggle{
+    padding: 0 10px !important;
+    font-size: 12px !important;
+    border-radius: 999px !important;
+    background: var(--sr-surface) !important;
+    border: 1px dashed #2e7d32 !important;
+    color: #2e7d32 !important;
+    font-weight: 500 !important;
+    }
+    .sql-sol-toggle:hover{ background: rgba(46,125,50,0.10) !important; }
+
+    /* -------------------------
+    Tabs results panel (dock)
+    ------------------------- */
+    .sql-runner .sql-tabs-panel{
+    border: 1px solid var(--sr-border);
+    border-radius: 10px;
+    background: var(--sr-surface);
+    overflow: hidden;
+
+    resize: vertical;
+    min-height: 220px;
+    }
+
+    /* Let outer panel own the border */
+    .sql-runner .sql-tabs-panel .widget-tab{
+    border: 0 !important;
+    background: transparent !important;
+
+    height: 100% !important;
+    display: flex !important;
+    flex-direction: column !important;
+    }
+
+    /* Remove focus rings */
+    .sql-runner .widget-tab:focus,
+    .sql-runner .widget-tab :focus{
+    outline: none !important;
+    box-shadow: none !important;
+    }
+
+    /* Tab bar */
+    .sql-runner .widget-tab > .p-TabBar{
+    flex: 0 0 auto !important;
+    background: var(--sr-surface2) !important;
+    border-bottom: 1px solid var(--sr-border) !important;
+    padding: 0 6px !important;
+    }
+
+    /* Tabs */
+    .sql-runner .p-TabBar-tab{
+    margin: 0 6px 0 0 !important;
+    padding: 6px 12px !important;
+    font-size: 13px !important;
+    line-height: 18px !important;
+    color: var(--sr-muted) !important;
+
+    background: transparent !important;
+    border: 1px solid transparent !important;
+    border-bottom: 0 !important;
+    border-radius: 8px 8px 0 0 !important;
+
+    position: relative;
+    }
+
+    .sql-runner .p-TabBar-tab:hover{
+    background: rgba(127,127,127,0.12) !important;
+    border-color: var(--sr-border) !important;
+    }
+
+    /* Active tab */
+    .sql-runner .p-TabBar-tab.p-mod-current{
+    background: var(--sr-surface) !important;
+    color: var(--sr-text) !important;
+    border-color: var(--sr-border) !important;
+    border-bottom: 1px solid var(--sr-surface) !important;
+    font-weight: 500 !important;
+    z-index: 2;
+
+    box-shadow: none !important;
+    background-image: none !important;
+    }
+
+    /* Remove any Lumino underline */
+    .sql-runner .p-TabBar-tab.p-mod-current::before{
+    content: none !important;
+    display: none !important;
+    }
+
+    /* Accent indicator inside the tab */
+    .sql-runner .p-TabBar-tab.p-mod-current::after{
+    content: "";
+    position: absolute;
+    left: 12px;
+    right: 12px;
+    bottom: 4px;
+    height: 2px;
+    background: var(--sr-accent);
+    border-radius: 2px;
+    }
+
+    /* Tab content */
+    .sql-runner .widget-tab > .p-TabPanel{
+    flex: 1 1 auto !important;
+    overflow: auto !important;
+    min-height: 140px;
+    box-sizing: border-box !important;
+
+    padding: 10px !important;
+    background: var(--sr-surface) !important;
+    color: var(--sr-text) !important;
+    }
+
+    /* Remove Lumino inner divider */
+    .sql-runner .sql-tabs-panel .widget-tab-contents,
+    .sql-runner .sql-tabs-panel .p-TabPanel-tabContents{
+    border: 0 !important;
+    box-shadow: none !important;
+    outline: none !important;
+    background: transparent !important;
+    }
+
+    /* -------------------------
+    Accordion (Schema) header styling
+    ------------------------- */
+    .sql-runner .p-Accordion .p-Collapse-header{
+    background: var(--sr-surface2) !important;
+    border: 1px solid var(--sr-border) !important;
+    border-radius: 8px !important;
+    }
+    .sql-runner .p-Accordion .p-Collapse-header i,
+    .sql-runner .p-Accordion .p-Collapse-header span{
+    color: var(--sr-text) !important;
+    }
+    .sql-runner .p-Accordion .p-Collapse-contents{
+    background: var(--sr-surface) !important;
+    border: 1px solid var(--sr-border) !important;
+    border-top: 0 !important;
+    border-radius: 0 0 8px 8px !important;
+    }
+    .sql-runner .p-Accordion .p-Collapse-header:hover{
+    background: rgba(127,127,127,0.12) !important;
+    }
+
+    /* -------------------------
+    Pandas Styler tables (results + schema)
+    ------------------------- */
+    .sql-runner table.dataframe,
+    .sql-runner .output table,
+    .sql-runner .jp-RenderedHTMLCommon table{
+    background: var(--sr-surface) !important;
+    color: var(--sr-text) !important;
+    border-collapse: collapse !important;
+    }
+
+    /* Header cells */
+    .sql-runner table.dataframe thead th,
+    .sql-runner .output thead th,
+    .sql-runner .jp-RenderedHTMLCommon thead th{
+    background: var(--sr-surface2) !important;
+    color: var(--sr-text) !important;
+    border: 1px solid var(--sr-border) !important;
+    padding: 6px 12px !important;
+    text-align: left !important;
+    }
+
+    /* Body cells */
+    .sql-runner table.dataframe tbody td,
+    .sql-runner .output tbody td,
+    .sql-runner .jp-RenderedHTMLCommon tbody td{
+    background: var(--sr-surface) !important;
+    color: var(--sr-text) !important;
+    border: 1px solid var(--sr-border2) !important;
+    padding: 6px 12px !important;
+    text-align: left !important;
+    }
+
+    /* Make table size to content without forcing full width */
+    .sql-runner table.dataframe{
+    width: auto !important;
+    max-width: 100% !important;
+    table-layout: fixed !important;
+
+    display: inline-block !important;
+    overflow-x: auto !important;
+    vertical-align: top;
+    }
+
+    /* Preserve whitespace for teaching (leading + multiple spaces) */
+    .sql-runner table.dataframe th,
+    .sql-runner table.dataframe td{
+    white-space: pre-wrap !important;    /* preserves spaces + wraps */
+    overflow-wrap: anywhere !important;  /* prevents overflow on long tokens */
+    word-break: break-word !important;
+    }
+
+    /* If you truly want to show leading spaces, switch to pre:
+    BUT this can make tables look weird with accidental spacing.
+    Uncomment only if needed.
+    */
+    /*
+    .sql-runner table.dataframe td{
+    white-space: pre !important;
+    }
+    */
+
+    /* -------------------------
+    Validation box
+    ------------------------- */
+    .sql-validation{
+    position: relative;
+    padding: 10px 38px 10px 12px;
+    margin: 8px 0 10px 0;
+    border-radius: 6px;
+    font-size: 14px;
+    line-height: 1.5;
+    color: var(--sr-text);
+    }
+    .sql-validation.ok{
+    border-left: 4px solid #2e7d32;
+    background: rgba(46,125,50,0.14);
+    }
+    .sql-validation.err{
+    border-left: 4px solid #b00020;
+    background: rgba(176,0,32,0.14);
+    }
+    .sql-validation .close{
+    position: absolute;
+    top: 8px;
+    right: 10px;
+    cursor: pointer;
+    user-select: none;
+    opacity: 0.65;
+    font-weight: 700;
+    }
+    .sql-validation .close:hover{ opacity: 1; }
+    .sql-validation ul{ margin: 6px 0 0 18px; }
     """
+
     _inject_css_once(CSS)
 
     # ---------- widgets ----------
