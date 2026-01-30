@@ -152,7 +152,7 @@ def make_sql_runner(
         .sql-runner .jp-RenderedHTMLCommon thead th{
           background: #f6f8fa !important;
           color: #24292f !important;
-          border-bottom: 1px solid #d0d7de !important;
+          border: 1px solid #d0d7de !important;
         }
 
         .sql-runner table.dataframe tbody td,
@@ -160,7 +160,7 @@ def make_sql_runner(
         .sql-runner .jp-RenderedHTMLCommon tbody td{
           background: #ffffff !important;
           color: #24292f !important;
-          border-bottom: 1px solid #eaeef2 !important;
+          border: 1px solid #eaeef2 !important;
         }
 
         /* kill dark zebra striping some themes apply */
