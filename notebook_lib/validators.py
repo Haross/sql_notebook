@@ -22,6 +22,10 @@ def df_fingerprint(
     def norm(v):
         if pd.isna(v):
             return na_token
+        # Normalize numbers deterministically (prevents 9.8999999999 issues)
+        if isinstance(v, (float, int)) and not isinstance(v, bool):
+            # choose decimals appropriate to your course; money is usually 2
+            return f"{float(v):.2f}"
         s = str(v)
         if normalize_whitespace:
             s = " ".join(s.split())
