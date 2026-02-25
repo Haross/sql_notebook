@@ -31,6 +31,7 @@ def make_cloud_run_submitter(
     import requests
 
     def _submit(runner_id: str, sql: str) -> Dict[str, Any]:
+        # todo token file not visible from module here and the notebok
         token_path = Path("student_token.txt")
         # token_path = Path(TOKEN_FILE) if TOKEN_FILE else Path("student_token.txt")
         if not token_path.exists():
