@@ -31,8 +31,8 @@ def make_cloud_run_submitter(
     import requests
 
     def _submit(runner_id: str, sql: str) -> Dict[str, Any]:
-
-        token_path = Path(TOKEN_FILE) if TOKEN_FILE else Path("student_token.txt")
+        token_path = Path("student_token.txt")
+        # token_path = Path(TOKEN_FILE) if TOKEN_FILE else Path("student_token.txt")
         if not token_path.exists():
             return {"ok": False, "error": "⚠️ No token found. Please enter and save your student token first."}
 
