@@ -1,3 +1,4 @@
+# @title
 # notebook_lib/sql_runner.py
 from __future__ import annotations
 
@@ -61,6 +62,9 @@ def make_sql_runner(
     hint_enabled: bool = False,
     hint_md: Optional[str] = None,
     schema_tables: Optional[List[str]] = None,
+
+    # --- Cloud submit (optional) ---
+    submitter: Optional[Callable[[str, str], Dict[str, Any]]] = None,
 ):
     # ---------- helpers ----------
     def md_to_html(md: str) -> str:
@@ -557,6 +561,55 @@ html[theme="dark"] .sql-runner{
     }
     .sql-validation .close:hover{ opacity: 1; }
     .sql-validation ul{ margin: 6px 0 0 18px; }
+
+
+.sql-submit{
+  position: relative;
+  padding: 10px 38px 10px 12px;
+  margin: 8px 0 10px 0;
+  border-radius: 8px;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--sr-text);
+  border-left: 4px solid var(--sr-border);
+  background: var(--sr-surface2);
+}
+
+.sql-submit.good{
+  border-left-color: #2e7d32;
+  background: rgba(46,125,50,0.14);
+}
+
+.sql-submit.warn{
+  border-left-color: #f9ab00;
+  background: rgba(249,171,0,0.14);
+}
+
+.sql-submit.bad{
+  border-left-color: #b00020;
+  background: rgba(176,0,32,0.14);
+}
+
+.sql-submit .close{
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  cursor: pointer;
+  user-select: none;
+  opacity: 0.65;
+  font-weight: 700;
+}
+.sql-submit .close:hover{ opacity: 1; }
+
+.sql-submit .meta{
+  color: var(--sr-muted);
+  font-size: 12px;
+  margin-top: 4px;
+}
+
+.sql-submit .hint{
+  margin-top: 6px;
+}
     """
 
     _inject_css_once(CSS)
@@ -719,6 +772,83 @@ html[theme="dark"] .sql-runner{
     def set_status(msg: str):
         status.value = f'<span class="hint">{msg}</span>' if msg else '<span class="hint"></span>'
 
+    submit_widget = widgets.HTML(value="")
+    submit_nonce = 0
+
+    def show_submit_result(
+        *,
+        ok: bool,
+        final_points: Optional[int] = None,
+        max_points: Optional[int] = None,
+        attempt: Optional[int] = None,
+        penalty_label: Optional[str] = None,   # e.g. "Penalty: 80%" or "Multiplier: ×0.8"
+        hint: Optional[str] = None,            # revealed failure text
+        error: Optional[str] = None            # hard error (exam closed, invalid token, etc.)
+    ):
+        nonlocal submit_nonce
+        submit_nonce += 1
+        box_id = f"submit_{runner_id}_{submit_nonce}"
+
+        if not ok:
+            cls = "bad"
+            title = "❌ Submission failed"
+            body = _html.escape(error or "Something went wrong.")
+            submit_widget.value = f"""
+              <div id="{box_id}" class="sql-submit {cls}">
+                <div class="close" onclick="document.getElementById('{box_id}').remove()">✕</div>
+                <b>{title}</b><br/>
+                {body}
+              </div>
+            """
+            return
+
+        # ok == True
+        # ok == True
+        if not hint:
+            cls = "good"
+            title = "✅ Correct!"
+        else:
+            cls = "warn"
+            title = "❌  Submitted (not perfect yet)"
+
+        score_line = ""
+        if final_points is not None:
+            if max_points is not None:
+                score_line = f"<b>Score:</b> {final_points} / {max_points}"
+            else:
+                score_line = f"<b>Score:</b> {final_points}"
+
+        meta_bits = []
+        if attempt is not None:
+            meta_bits.append(f"Attempt {attempt}")
+        if penalty_label:
+            meta_bits.append(_html.escape(penalty_label))
+
+        meta_line = " • ".join(meta_bits)
+
+        hint_html = ""
+        if hint:
+            hint_html = f"<div class='hint'><b>Next hint:</b> {_html.escape(hint)}</div>"
+
+        submit_widget.value = f"""
+          <div id="{box_id}" class="sql-submit {cls}">
+            <div class="close" onclick="document.getElementById('{box_id}').remove()">✕</div>
+            <b>{title}</b><br/>
+            {score_line}
+            <div class="meta">{meta_line}</div>
+            {hint_html}
+          </div>
+        """
+
+    submit_btn = None
+    if submitter is not None:
+        submit_btn = widgets.Button(
+            description="📤 Submit",
+            tooltip="Submit to the autograder",
+            layout=widgets.Layout(height="40px"),
+        )
+        submit_btn.add_class("sql-sol-toggle")    
+
     # Toolbar composition
     left_items = [run_btn]
     if hint_btn:
@@ -730,6 +860,9 @@ html[theme="dark"] .sql-runner{
     left_items.extend([clear_results_btn, clear_query_btn])
     if sol_btn:
         left_items.append(sol_btn)
+
+    if submit_btn:
+      left_items.append(submit_btn)
 
     left = widgets.HBox(left_items, layout=widgets.Layout(gap="8px", align_items="center"))
     right = widgets.HBox([status], layout=widgets.Layout(justify_content="flex-end", align_items="center"))
@@ -909,12 +1042,82 @@ html[theme="dark"] .sql-runner{
         box.value = ""
         set_status("Cleared query editor.")
 
+    def penalty_label_from_multiplier(mult: float) -> str:
+        try:
+            mult = float(mult)
+        except Exception:
+            return "Penalty: unknown"
+        if mult >= 0.999:
+            return "Penalty: none"
+        pct = int(round((1.0 - mult) * 100))
+        return f"Penalty: {pct}%"    
+
+    def on_submit(_):
+        if submitter is None:
+            show_submit_result(ok=False, error="Submit is not configured for this notebook.")
+            return
+        q = box.value.strip()
+        if not q:
+            show_submit_result(ok=False, error="Please type a query first.")
+            return
+
+        if select_only and not q.lower().lstrip().startswith(("select", "with")):
+            show_submit_result(ok=False, error="Only SELECT/WITH queries are allowed.")
+            return
+
+        # disable while submitting
+        for b in (run_btn, revert_btn, clear_results_btn, clear_query_btn):
+            b.disabled = True
+        if reset_btn:
+            reset_btn.disabled = True
+        if hint_btn:
+            hint_btn.disabled = True
+        if sol_btn:
+            sol_btn.disabled = True
+        if submit_btn:
+            submit_btn.disabled = True
+
+        try:
+            resp = submitter(runner_id, q)
+
+            if not resp.get("ok", False):
+                show_submit_result(ok=False, error=resp.get("error") or "Submit failed.")
+            else:
+                mult = float(resp.get("multiplier", 1.0))
+                show_submit_result(
+                    ok=True,
+                    final_points=resp.get("final_points"),
+                    max_points=resp.get("max_points"),
+                    attempt=resp.get("attempt"),
+                    penalty_label=penalty_label_from_multiplier(mult),
+                    hint=resp.get("hint"),
+                )
+            set_status("Submitted." if resp.get("ok", False) else "Submit failed.")
+        except Exception as e:
+            show_submit_result(ok=False, error=str(e))
+            set_status("Submit error.")
+        finally:
+            for b in (run_btn, revert_btn, clear_results_btn, clear_query_btn):
+                b.disabled = False
+            if reset_btn:
+                reset_btn.disabled = False
+            if hint_btn:
+                hint_btn.disabled = False
+            if sol_btn:
+                sol_btn.disabled = False
+            if submit_btn:
+                submit_btn.disabled = False    
+
     run_btn.on_click(run_query)
     revert_btn.on_click(revert_query)
     if reset_btn:
         reset_btn.on_click(reset_to_default)
     clear_results_btn.on_click(clear_results)
     clear_query_btn.on_click(clear_query)
+   
+    if submit_btn:
+        submit_btn.on_click(on_submit)
+    
 
     # ---------- layout ----------
     elements = []
@@ -925,6 +1128,8 @@ html[theme="dark"] .sql-runner{
     if sol_box:
         elements.append(sol_box)
     elements.append(validation_widget)
+    if submitter is not None:
+      elements.append(submit_widget)
 
     editor_panel = widgets.VBox([box, toolbar])
     editor_panel.add_class("sql-panel")
