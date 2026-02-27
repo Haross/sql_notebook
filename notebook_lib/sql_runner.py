@@ -77,6 +77,44 @@ def make_sql_runner(
     # ---------- persistence ----------
     LOG_ALL_FILE = Path("sql_query_log.csv")
     LOG_LATEST_FILE = Path("sql_query_latest.csv")
+    SCORE_FILE = Path("sql_grades.csv")
+
+    def _load_scores(path: Path = SCORE_FILE) -> dict:
+        if not path.exists():
+            return {}
+
+        scores = {}
+        with path.open("r", newline="", encoding="utf-8") as f:
+            r = csv.DictReader(f)
+            for row in r:
+                scores[row["runner_id"]] = {
+                    "current_points": _to_int(row.get("current_points")),
+                    "best_points": _to_int(row.get("best_points")),
+                    "max_points": _to_int(row.get("max_points")),
+                    "attempt": _to_int(row.get("attempt")),
+                }
+        return scores
+
+
+    def _save_scores(scores: dict, path: Path = SCORE_FILE) -> None:
+        with path.open("w", newline="", encoding="utf-8") as f:
+            w = csv.writer(f)
+            w.writerow(["runner_id", "current_points", "best_points", "max_points", "attempt"])
+            for rid, rec in scores.items():
+                w.writerow([
+                    rid,
+                    rec.get("current_points"),
+                    rec.get("best_points"),
+                    rec.get("max_points"),
+                    rec.get("attempt"),
+                ])
+
+
+    def _to_int(x):
+        try:
+            return int(x) if x not in (None, "", "None") else None
+        except Exception:
+            return None
 
     def _append_history(runner_id: str, sql: str, log_path: Path = LOG_ALL_FILE):
         is_new = not log_path.exists()
@@ -610,6 +648,16 @@ html[theme="dark"] .sql-runner{
 .sql-submit .hint{
   margin-top: 6px;
 }
+
+
+.score {
+  font-size: 13px;
+  opacity: 0.9;
+  padding: 4px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(0,0,0,0.15);
+}
+.score.muted { opacity: 0.6; }
     """
 
     _inject_css_once(CSS)
@@ -772,6 +820,60 @@ html[theme="dark"] .sql-runner{
     def set_status(msg: str):
         status.value = f'<span class="hint">{msg}</span>' if msg else '<span class="hint"></span>'
 
+    score_store = _load_scores()
+    score_key = runner_id
+
+    score_widget = widgets.HTML(value="")
+
+    def _render_score_line(rec: dict) -> str:
+        if not rec:
+            return "<span class='score muted'>Score: —</span>"
+
+        cur = rec.get("current_points")
+        mx = rec.get("max_points")
+        best = rec.get("best_points")
+        att = rec.get("attempt")
+
+        parts = []
+
+        if cur is None:
+            parts.append("Score: —")
+        else:
+            parts.append(f"Score: <b>{cur}</b>" + (f" / {mx}" if mx is not None else ""))
+
+        #if best is not None and cur is not None and best != cur:
+        #    parts.append(f"Best: {best}" + (f" / {mx}" if mx is not None else ""))
+
+        if att is not None:
+            parts.append(f"Attempts: {att}")
+
+        return "<span class='score'>" + " &nbsp;|&nbsp; ".join(parts) + "</span>"
+
+    def _update_score_widget(*, current_points=None, max_points=None, attempt=None):
+        rec = score_store.get(score_key, {})
+
+        if current_points is not None:
+            rec["current_points"] = current_points
+
+        if max_points is not None:
+            rec["max_points"] = max_points
+
+        if attempt is not None:
+            rec["attempt"] = attempt
+
+        # Update best score automatically
+        cur = rec.get("current_points")
+        best = rec.get("best_points")
+        if isinstance(cur, (int, float)) and (best is None or cur > best):
+            rec["best_points"] = cur
+
+        score_store[score_key] = rec
+        _save_scores(score_store)
+        score_widget.value = _render_score_line(rec)
+
+    # Initialize from CSV
+    score_widget.value = _render_score_line(score_store.get(score_key, {}))
+
     submit_widget = widgets.HTML(value="")
     submit_nonce = 0
 
@@ -865,7 +967,12 @@ html[theme="dark"] .sql-runner{
       left_items.append(submit_btn)
 
     left = widgets.HBox(left_items, layout=widgets.Layout(gap="8px", align_items="center"))
-    right = widgets.HBox([status], layout=widgets.Layout(justify_content="flex-end", align_items="center"))
+    right = widgets.HBox([score_widget, status],layout=widgets.Layout(
+            justify_content="flex-end",
+            align_items="center",
+            gap="12px"
+        )
+    )
 
     toolbar = widgets.HBox(
         [left, right],
@@ -1092,6 +1199,11 @@ html[theme="dark"] .sql-runner{
                     penalty_label=penalty_label_from_multiplier(mult),
                     hint=resp.get("hint"),
                 )
+                final_pts = resp.get("final_points")
+                max_pts = resp.get("max_points")
+                att = resp.get("attempt")
+
+                _update_score_widget(current_points=final_pts, max_points=max_pts,attempt=att,)
             set_status("Submitted." if resp.get("ok", False) else "Submit failed.")
         except Exception as e:
             show_submit_result(ok=False, error=str(e))
