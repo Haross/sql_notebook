@@ -105,6 +105,7 @@ def make_cloud_run_submitter(
             "ok": True,
             "attempt": data.get("attempt"),
             "final_points": data.get("final_points"),
+            "max_points": data.get("max_points"),
             "raw_points": data.get("raw_points"),
             "multiplier": data.get("multiplier"),
             "hint": hint,
