@@ -3,8 +3,6 @@ from __future__ import annotations
 from typing import Callable, Optional, Dict, Any
 from pathlib import Path
 
-from __future__ import annotations
-
 def make_cloud_run_submitter(
     *,
     submit_url: str,
