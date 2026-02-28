@@ -539,7 +539,14 @@ def make_sql_runner(
             resp = submitter(runner_id, q)
 
             if not resp.get("ok", False):
-                show_submit_result(ok=False, error=resp.get("error") or "Submit failed.")
+                code = resp.get("error_code")
+                msg  = resp.get("error_message") or resp.get("error") or "Submit failed."
+
+                if code == "MAX_ATTEMPTS":
+                    show_submit_result(ok=False, error=msg)  # or a nicer title too
+                else:
+                    show_submit_result(ok=False, error=msg)
+                return
             else:
                 mult = float(resp.get("multiplier", 1.0))
                 show_submit_result(

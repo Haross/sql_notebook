@@ -3,6 +3,8 @@ from __future__ import annotations
 from typing import Callable, Optional, Dict, Any
 from pathlib import Path
 
+from __future__ import annotations
+
 def make_cloud_run_submitter(
     *,
     submit_url: str,
@@ -11,36 +13,42 @@ def make_cloud_run_submitter(
     api_key: Optional[str] = None,
     timeout_s: int = 20,
 ) -> Callable[[str, str], Dict[str, Any]]:
-    """
-    Returns a function (runner_id, sql) -> dict
-    that calls your Cloud Run /submit endpoint.
-
-    Success shape:
-      {
-        "ok": True,
-        "attempt": int,
-        "final_points": int,
-        "raw_points": int,
-        "multiplier": float,
-        "hint": Optional[str]
-      }
-
-    Error shape:
-      { "ok": False, "error": str }
-    """
     import requests
 
+    def _err(
+        *,
+        status_code: int | None,
+        code: str | None,
+        message: str,
+        **extra: Any,
+    ) -> Dict[str, Any]:
+        # Keep old "error" key for backwards compatibility
+        out: Dict[str, Any] = {
+            "ok": False,
+            "status_code": status_code,
+            "error_code": code,
+            "error_message": message,
+            "error": message,
+        }
+        out.update(extra)
+        return out
+
     def _submit(runner_id: str, sql: str) -> Dict[str, Any]:
-        # todo token file not visible from module here and the notebok
         token_path = Path("student_token.txt")
-        # token_path = Path(TOKEN_FILE) if TOKEN_FILE else Path("student_token.txt")
         if not token_path.exists():
-            return {"ok": False, "error": "⚠️ No token found. Please enter and save your student token first."}
+            return _err(
+                status_code=None,
+                code="NO_TOKEN",
+                message="⚠️ No token found. Please enter and save your student token first.",
+            )
 
-        student_token = token_path.read_text(encoding="utf-8").strip()    
-
+        student_token = token_path.read_text(encoding="utf-8").strip()
         if len(student_token) < 6:
-            return {"ok": False, "error": "⚠️ Invalid or incomplete token. Please verify and save again. Contact the professor if needed."}
+            return _err(
+                status_code=None,
+                code="BAD_TOKEN_FORMAT",
+                message="⚠️ Invalid or incomplete token. Please verify and save again. Contact the professor if needed.",
+            )
 
         payload: Dict[str, Any] = {
             "student_token": student_token,
@@ -56,50 +64,103 @@ def make_cloud_run_submitter(
         try:
             r = requests.post(submit_url, json=payload, headers=headers, timeout=timeout_s)
         except Exception as e:
-            return {"ok": False, "error": f"Network error: {e}"}
+            return _err(
+                status_code=None,
+                code="NETWORK_ERROR",
+                message=f"Network error: {e}",
+            )
 
-        # Handle HTTP errors
+        # ---------- HTTP error handling ----------
         if r.status_code >= 400:
             try:
                 data = r.json()
             except Exception:
-                return {"ok": False, "error": f"{r.status_code}: {r.text}"}
+                # Non-JSON error
+                return _err(
+                    status_code=r.status_code,
+                    code="HTTP_ERROR",
+                    message=f"{r.status_code}: {r.text}",
+                )
 
-            detail = data.get("detail")
+            detail = data.get("detail", data)
 
-
-            #  Special handling for invalid token
+            # Case A: structured FastAPI detail dict
             if isinstance(detail, dict):
                 code = detail.get("code")
                 msg = detail.get("message") or "Submission failed."
 
+                # Friendly overrides (optional)
                 if code == "INVALID_TOKEN":
-                    return {"ok": False, "error": "Token not valid for this exam. Please contact the professor."}
-                if code == "EXAM_CLOSED":
-                    return {"ok": False, "error": "⛔ The exam is currently closed."}
+                    msg = "🔑 Token not valid for this exam. Please contact the professor."
+                elif code == "EXAM_CLOSED":
+                    msg = "⛔ The exam is currently closed."
+                elif code == "MAX_ATTEMPTS":
+                    # If backend includes max_attempts, use it
+                    max_attempts = detail.get("max_attempts")
+                    if max_attempts is not None:
+                        msg = f"🚫 No attempts left. Maximum attempts is {max_attempts}."
+                    else:
+                        msg = "🚫 No attempts left for this question."
 
-                return {"ok": False, "error": msg}
+                # Return structured info + keep msg in error
+                extra = {k: v for k, v in detail.items() if k not in ("code", "message")}
+                return _err(
+                    status_code=r.status_code,
+                    code=code,
+                    message=msg,
+                    **extra,
+                )
 
-
+            # Case B: pydantic validation errors list
             if isinstance(detail, list):
                 # If token failed validation, show a friendlier message
                 for d in detail:
                     loc = d.get("loc", [])
                     if len(loc) >= 2 and loc[-1] == "student_token":
-                        return {"ok": False, "error": "⚠️ Token missing/invalid format. Please re-enter and save your token."}
+                        return _err(
+                            status_code=r.status_code,
+                            code="TOKEN_VALIDATION_ERROR",
+                            message="⚠️ Token missing/invalid format. Please re-enter and save your token.",
+                            detail=detail,
+                        )
 
-                # otherwise show generic validation messages
                 msg = "; ".join(
                     [f"{'.'.join(map(str, d.get('loc', [])))}: {d.get('msg')}" for d in detail]
                 )
-                return {"ok": False, "error": f"{r.status_code}: {msg}"}
+                return _err(
+                    status_code=r.status_code,
+                    code="VALIDATION_ERROR",
+                    message=msg,
+                    detail=detail,
+                )
 
-            return {"ok": False, "error": f"{r.status_code}: {detail or data}"}
+            # Case C: plain string detail
+            if isinstance(detail, str):
+                # If backend hasn't been updated yet, you can optionally detect max attempts here:
+                if "Max attempts" in detail:
+                    return _err(
+                        status_code=r.status_code,
+                        code="MAX_ATTEMPTS",
+                        message="🚫 No attempts left for this question.",
+                        raw_detail=detail,
+                    )
+                return _err(
+                    status_code=r.status_code,
+                    code="HTTP_ERROR",
+                    message=detail,
+                )
 
-        # Success
+            # Fallback: unknown error shape
+            return _err(
+                status_code=r.status_code,
+                code="HTTP_ERROR",
+                message=str(detail),
+            )
+
+        # ---------- Success ----------
         data = r.json()
         revealed = data.get("revealed_failure") or {}
-        hint = revealed.get("description")  # <-- your green/amber rule can use this
+        hint = revealed.get("description")
 
         return {
             "ok": True,
