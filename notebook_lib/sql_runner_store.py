@@ -52,9 +52,11 @@ def load_scores(score_file: Path) -> Dict[str, Dict[str, Any]]:
     return scores
 
 def save_scores(score_file: Path, scores: Dict[str, Dict[str, Any]]) -> None:
-    with score_file.open("w", newline="", encoding="utf-8") as f:
+    is_new = not score_file.exists()
+    with score_file.open("a", newline="", encoding="utf-8") as f:
         w = csv.writer(f)
-        w.writerow(["runner_id", "current_points", "max_points", "attempt"])
+        if is_new:
+            w.writerow(["runner_id", "current_points", "max_points", "attempt"])
         for rid, rec in scores.items():
             w.writerow([rid, rec.get("current_points"), rec.get("max_points"), rec.get("attempt")])
 

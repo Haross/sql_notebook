@@ -96,9 +96,9 @@ def make_cloud_run_submitter(
                     # If backend includes max_attempts, use it
                     max_attempts = detail.get("max_attempts")
                     if max_attempts is not None:
-                        msg = f"🚫 No attempts left. Maximum attempts is {max_attempts}."
+                        msg = f"No attempts left. Maximum attempts is {max_attempts}."
                     else:
-                        msg = "🚫 No attempts left for this question."
+                        msg = "No attempts left for this question."
 
                 # Return structured info + keep msg in error
                 extra = {k: v for k, v in detail.items() if k not in ("code", "message")}
