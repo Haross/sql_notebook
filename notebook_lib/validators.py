@@ -88,7 +88,7 @@ def make_df_validator_nospoilers(
         if got_hash != expected_hash:
             return False, ["The result is not correct yet. Make corrections and try again."]
 
-        return True, ["Nice — your output matches the expected result ✅"]
+        return True, [""]
 
     return validator
 
