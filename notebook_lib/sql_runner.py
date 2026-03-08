@@ -39,7 +39,12 @@ def make_sql_runner(
 
     # --- Cloud submit (optional) ---
     submitter: Optional[Callable[[str, str], Dict[str, Any]]] = None,
+
+    db_type: str = "sqlite",  
 ):
+    db_type = (db_type or "sqlite").strip().lower()
+    if db_type not in {"sqlite", "duckdb"}:
+        raise ValueError("db_type must be 'sqlite' or 'duckdb'")
 
     # ---------- persistence ----------
     LOG_ALL_FILE = Path("sql_query_log.csv")
@@ -279,8 +284,7 @@ def make_sql_runner(
         if penalty_label:
             meta_bits.append(penalty_label)
 
-        meta_line = " • ".join(meta_bits)
-        meta_line = _html.escape(meta_line)
+        meta_line = _html.escape(" • ".join(meta_bits))
 
         submit_widget.value = render_submit_banner(
             box_id=box_id,
@@ -331,20 +335,91 @@ def make_sql_runner(
     )
     toolbar.add_class("sql-toolbar")
 
+    # ---------- database helpers ----------
+    def _run_select(query: str) -> pd.DataFrame:
+        if db_type == "sqlite":
+            return pd.read_sql_query(query, conn)
+        return conn.execute(query).df()
+    
+    def _run_script(query: str) -> None:
+        if db_type == "sqlite":
+            cur = conn.cursor()
+            cur.executescript(query)
+            conn.commit()
+        else:
+            conn.execute(query)
+
+    def _list_tables() -> list[str]:
+        if db_type == "sqlite":
+            df = pd.read_sql_query(
+                """
+                SELECT name
+                FROM sqlite_master
+                WHERE type='table' AND name NOT LIKE 'sqlite_%'
+                ORDER BY name;
+                """,
+                conn
+            )
+            return df["name"].tolist()
+
+        df = conn.execute(
+            """
+            SELECT table_name
+            FROM information_schema.tables
+            WHERE table_schema = 'main'
+              AND table_type = 'BASE TABLE'
+            ORDER BY table_name
+            """
+        ).df()
+        return df["table_name"].tolist()        
+
+    def _table_info(table_name: str) -> pd.DataFrame:
+        if db_type == "sqlite":
+            info = pd.read_sql_query(f"PRAGMA table_info('{table_name}');", conn)
+            info = info[["name", "type", "notnull", "dflt_value", "pk"]]
+            return info.rename(columns={
+                "name": "attribute",
+                "type": "datatype",
+                "notnull": "not null",
+                "dflt_value": "default value",
+                "pk": "primary key"
+            })
+
+        info = conn.execute(f"DESCRIBE {table_name}").df()
+        info = info.rename(columns={
+            "column_name": "attribute",
+            "column_type": "datatype",
+            "null": "null_ok",
+            "default": "default value",
+            "key": "key",
+        })
+
+        if "attribute" not in info.columns:
+            info["attribute"] = None
+        if "datatype" not in info.columns:
+            info["datatype"] = None
+        if "default value" not in info.columns:
+            info["default value"] = None
+        if "null_ok" not in info.columns:
+            info["null_ok"] = None
+        if "key" not in info.columns:
+            info["key"] = None
+
+        info["not null"] = info["null_ok"].map(
+            lambda x: "YES" if str(x).upper() == "NO" else ""
+        )
+        info["primary key"] = info["key"].map(
+            lambda x: "YES" if str(x).upper() == "PRI" else ""
+        )
+
+        return info[["attribute", "datatype", "not null", "default value", "primary key"]]
+
     # ---------- schema renderer ----------
     def render_schema():
         with schema_out:
             clear_output()
             try:
-                all_tables = pd.read_sql_query(
-                    """
-                    SELECT name
-                    FROM sqlite_master
-                    WHERE type='table' AND name NOT LIKE 'sqlite_%'
-                    ORDER BY name;
-                    """,
-                    conn
-                )["name"].tolist()
+                all_tables = _list_tables()
 
                 if not all_tables:
                     display(HTML("<b>No tables found.</b>"))
@@ -371,15 +446,7 @@ def make_sql_runner(
                 titles = []
 
                 for t in tables:
-                    info = pd.read_sql_query(f"PRAGMA table_info('{t}');", conn)
-                    info = info[["name", "type", "notnull", "dflt_value", "pk"]]
-                    info = info.rename(columns={
-                            "name": "attribute",
-                            "type": "datatype",
-                            "notnull": "not null",
-                            "dflt_value": "default value",
-                            "pk": "primary key"
-                        })
+                    info = _table_info()
 
                     out = widgets.Output()
                     with out:
@@ -445,21 +512,18 @@ def make_sql_runner(
 
             try:
                 if q.lower().lstrip().startswith(("select", "with")):
-                    df = pd.read_sql_query(q, conn)
+                    df = _run_select(q)
                     display(df.style.format(na_rep="NULL").hide(axis="index"))
                     set_status(f"Returned {len(df)} row(s).")
 
                     if validator:
-                        # ✅ New consistent signature:
                         ok, problems = validator(q, df, conn)
                         show_validation(ok, problems)
                     else:
                         hide_validation()
 
                 else:
-                    cur = conn.cursor()
-                    cur.executescript(q)
-                    conn.commit()
+                    _run_script(q)
                     display(HTML("<b>✅ Query executed.</b>"))
                     set_status("Query executed.")
                     hide_validation()
@@ -617,4 +681,4 @@ def make_sql_runner(
     display(ui)
 
     render_schema()
-    set_status("Ready.")
+    set_status(f"Ready ({db_type}).")
