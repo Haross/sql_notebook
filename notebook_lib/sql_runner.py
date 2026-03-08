@@ -22,6 +22,25 @@ from notebook_lib.sql_runner_ui_bits import (
     render_submit_banner,
 )
 
+def _detect_db_type(conn) -> str:
+    """
+    Detect database backend from connection object.
+    Returns: 'sqlite' or 'duckdb'
+    """
+    mod = type(conn).__module__.lower()
+    name = type(conn).__name__.lower()
+
+    if "duckdb" in mod or "duckdb" in name:
+        return "duckdb"
+
+    if "sqlite3" in mod or "sqlite" in name:
+        return "sqlite"
+
+    raise ValueError(
+        f"Unsupported database connection type: {type(conn)}. "
+        "Supported: sqlite3, duckdb"
+    )
+
 def make_sql_runner(
     conn,
     runner_id: str,
@@ -39,10 +58,8 @@ def make_sql_runner(
 
     # --- Cloud submit (optional) ---
     submitter: Optional[Callable[[str, str], Dict[str, Any]]] = None,
-
-    db_type: str = "sqlite",  
 ):
-    db_type = (db_type or "sqlite").strip().lower()
+    db_type = _detect_db_type(conn)
     if db_type not in {"sqlite", "duckdb"}:
         raise ValueError("db_type must be 'sqlite' or 'duckdb'")
 
