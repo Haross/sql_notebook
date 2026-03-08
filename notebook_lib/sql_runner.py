@@ -463,7 +463,7 @@ def make_sql_runner(
                 titles = []
 
                 for t in tables:
-                    info = _table_info()
+                    info = _table_info(t)
 
                     out = widgets.Output()
                     with out:
