@@ -1,3 +1,4 @@
+# cloud_submitter.py
 from __future__ import annotations
 
 from typing import Callable, Optional, Dict, Any
@@ -41,11 +42,11 @@ def make_cloud_run_submitter(
             )
 
         student_token = token_path.read_text(encoding="utf-8").strip()
-        if len(student_token) < 6:
+        if len(student_token) < 2:
             return _err(
                 status_code=None,
                 code="BAD_TOKEN_FORMAT",
-                message="⚠️ Invalid or incomplete token. Please verify and save again. Contact the professor if needed.",
+                message="⚠️ Invalid or incomplete token. Token must be more than one character. Please verify and save again. Contact the professor if needed.",
             )
 
         payload: Dict[str, Any] = {
