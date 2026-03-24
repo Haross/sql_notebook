@@ -145,7 +145,10 @@ html[theme="dark"] .sql-runner{
     }
 
     /* Textarea wrapper adapts to resized textarea */
-    .sql-runner .widget-textarea{ height: auto !important; }
+    .sql-runner .widget-textarea{
+      height: auto !important;
+      padding-right: 2px !important;
+    }
 
     /* Base textarea behavior (resizable) */
     .sql-runner .widget-textarea textarea{
