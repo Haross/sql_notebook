@@ -643,6 +643,18 @@ html[theme="dark"] .condition-explorer .ce-collapse-header.widget-button:hover{
 }
 
 
+.condition-explorer .ce-bool-text{
+  font-weight: 700;
+}
+
+.condition-explorer .ce-bool-text.true{
+  color: var(--ce-true-bd);
+}
+
+.condition-explorer .ce-bool-text.false{
+  color: var(--ce-false-bd);
+}
+
 """
 
 
@@ -784,6 +796,12 @@ def render_dataframe_table(
 # =========================================================
 # Parsing / evaluation helpers
 # =========================================================
+def bool_text(value: bool) -> str:
+    cls = "true" if value else "false"
+    label = "True" if value else "False"
+    return f"<span class='ce-bool-text {cls}'>{label}</span>"
+
+
 def get_step_result_for_table_mode(expr: str, evaluated_df: pd.DataFrame, values_text: str):
     """
     Use current values box when valid.
@@ -1395,7 +1413,10 @@ def render_steps_section(steps: list[dict], final_value: bool, values: dict) -> 
     steps_html = []
     for i, step in enumerate(steps, 1):
         condition_html = f"<span class='ce-code'>{_html.escape(step['expr'])}</span>"
-        reduced_html = f"<span class='ce-code'>{_html.escape(step['reduced'])}</span>"
+        reduced_text = _html.escape(step["reduced"])
+        reduced_text = re.sub(r"\bTrue\b", lambda _: bool_text(True), reduced_text)
+        reduced_text = re.sub(r"\bFalse\b", lambda _: bool_text(False), reduced_text)
+        reduced_html = f"<span class='ce-code'>{reduced_text}</span>"
         result_html = bool_badge(step["value"])
 
         steps_html.append(f"""
