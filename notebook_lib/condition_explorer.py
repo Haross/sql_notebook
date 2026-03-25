@@ -975,6 +975,15 @@ def extract_variables_from_condition(expr: str) -> list[str]:
 def normalize_boolean_keywords(expr: str) -> str:
     expr = re.sub(r"\bAND\b", "AND", expr, flags=re.IGNORECASE)
     expr = re.sub(r"\bOR\b", "OR", expr, flags=re.IGNORECASE)
+    expr = re.sub(r"\bNOT\b", "NOT", expr, flags=re.IGNORECASE)
+    expr = re.sub(r"\bIN\b", "IN", expr, flags=re.IGNORECASE)
+    expr = re.sub(r"\bLIKE\b", "LIKE", expr, flags=re.IGNORECASE)
+    expr = re.sub(r"\bBETWEEN\b", "BETWEEN", expr, flags=re.IGNORECASE)
+    expr = re.sub(r"\bIS\b", "IS", expr, flags=re.IGNORECASE)
+    expr = re.sub(r"\bNULL\b", "NULL", expr, flags=re.IGNORECASE)
+    expr = re.sub(r"\bTRUE\b", "TRUE", expr, flags=re.IGNORECASE)
+    expr = re.sub(r"\bFALSE\b", "FALSE", expr, flags=re.IGNORECASE)
+    expr = re.sub(r"\s+", " ", expr).strip()
     return expr
 
 
@@ -1312,16 +1321,18 @@ def eval_atomic(expr: str, values: dict) -> dict:
         "reduced": reduced,
     }
 
+def normalize_condition_spacing(expr: str) -> str:
+    return re.sub(r"\s+", " ", expr).strip()
 
 def evaluate(expr: str, values: dict, steps: list, original_expr: str | None = None) -> dict:
-    expr = expr.strip()
+    expr = normalize_condition_spacing(expr)
     stripped = strip_outer_parens(expr)
 
     if original_expr is None:
         original_expr = stripped
 
-    # OR (lowest precedence)
-    parts = split_top_level(stripped, " OR ")
+    # OR
+    parts = split_top_level(stripped, "OR")
     if len(parts) > 1:
         evaluated_parts = [evaluate(p, values, steps, p) for p in parts]
         reduced = " OR ".join(part["rendered"] for part in evaluated_parts)
@@ -1340,7 +1351,7 @@ def evaluate(expr: str, values: dict, steps: list, original_expr: str | None = N
         }
 
     # AND
-    parts = split_top_level(stripped, " AND ")
+    parts = split_top_level(stripped, "AND")
     if len(parts) > 1:
         evaluated_parts = [evaluate(p, values, steps, p) for p in parts]
         reduced = " AND ".join(part["rendered"] for part in evaluated_parts)
@@ -1384,6 +1395,7 @@ def evaluate(expr: str, values: dict, steps: list, original_expr: str | None = N
         "value": atom["value"],
     })
     return atom
+
 
 def build_balanced_preview(df: pd.DataFrame, max_rows: int = 12) -> pd.DataFrame:
     if df is None or df.empty:
