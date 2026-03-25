@@ -1169,10 +1169,6 @@ def eval_atomic(expr: str, values: dict) -> dict:
     if m_between:
         left, low_raw, high_raw = m_between.groups()
 
-        left = left.strip()
-        low_raw = low_raw.strip()
-        high_raw = high_raw.strip()
-
         if left not in values:
             raise ValueError(f"Missing value for variable: {left}")
 
@@ -1180,12 +1176,8 @@ def eval_atomic(expr: str, values: dict) -> dict:
         low_val = values[low_raw] if low_raw in values else parse_literal(low_raw)
         high_val = values[high_raw] if high_raw in values else parse_literal(high_raw)
 
-        if low_val is None or high_val is None or left_val is None:
-            result = False
-            reduced = f"{format_value(low_val)} <= {format_value(left_val)} <= {format_value(high_val)}"
-        else:
-            result = low_val <= left_val <= high_val
-            reduced = f"{format_value(low_val)} <= {format_value(left_val)} <= {format_value(high_val)}"
+        result = low_val <= left_val <= high_val
+        reduced = f"{low_val} <= {left_val} <= {high_val}"
 
         return {
             "expr": expr,
@@ -1203,12 +1195,31 @@ def eval_atomic(expr: str, values: dict) -> dict:
             raise ValueError(f"Missing value for variable: {left}")
 
         left_val = values[left]
-
-        # split values inside (...)
         items = [parse_literal(x.strip()) for x in raw_list.split(",")]
 
         result = left_val in items
         reduced = f"{left_val} IN {items}"
+
+        return {
+            "expr": expr,
+            "value": result,
+            "rendered": format_bool_word(result),
+            "reduced": reduced,
+        }
+
+    # NOT IN operator
+    m_not_in = re.fullmatch(r"([a-zA-Z_]\w*)\s+NOT\s+IN\s*\((.+)\)", expr, flags=re.IGNORECASE)
+    if m_not_in:
+        left, raw_list = m_not_in.groups()
+
+        if left not in values:
+            raise ValueError(f"Missing value for variable: {left}")
+
+        left_val = values[left]
+        items = [parse_literal(x.strip()) for x in raw_list.split(",")]
+
+        result = left_val not in items
+        reduced = f"{left_val} NOT IN {items}"
 
         return {
             "expr": expr,
@@ -1222,15 +1233,46 @@ def eval_atomic(expr: str, values: dict) -> dict:
     if m_null:
         var, not_part = m_null.groups()
 
-        val = values.get(var, None)  # <-- key change
-
+        val = values.get(var, None)
         is_null = val is None
-        result = not is_null if not_part else is_null
+        result = (not is_null) if not_part else is_null
+        reduced = f"{format_value(val)} IS {'NOT ' if not_part else ''}NULL"
 
-        val_str = format_value(val)
+        return {
+            "expr": expr,
+            "value": result,
+            "rendered": format_bool_word(result),
+            "reduced": reduced,
+        }
 
-        reduced = f"{val_str} IS {'NOT ' if not_part else ''}NULL"
+    # NOT LIKE operator
+    m_not_like = re.fullmatch(
+        r"([a-zA-Z_]\w*)\s+NOT\s+LIKE\s+(.+)",
+        expr,
+        flags=re.IGNORECASE,
+    )
+    if m_not_like:
+        left, pattern_raw = m_not_like.groups()
 
+        if left not in values:
+            raise ValueError(f"Missing value for variable: {left}")
+
+        left_val = values[left]
+        pattern_val = values[pattern_raw] if pattern_raw in values else parse_literal(pattern_raw)
+
+        if left_val is None:
+            result = True
+            reduced = f"{format_value(left_val)} NOT LIKE {format_value(pattern_val)}"
+        else:
+            left_str = str(left_val)
+            pattern_str = str(pattern_val)
+
+            regex = re.escape(pattern_str)
+            regex = regex.replace("%", ".*").replace("_", ".")
+            regex = f"^{regex}$"
+
+            result = re.match(regex, left_str) is None
+            reduced = f"{left_str} NOT LIKE {pattern_str}"
 
         return {
             "expr": expr,
@@ -1256,12 +1298,11 @@ def eval_atomic(expr: str, values: dict) -> dict:
 
         if left_val is None:
             result = False
-            reduced = f"{left_val} LIKE {pattern_val}"
+            reduced = f"{format_value(left_val)} LIKE {format_value(pattern_val)}"
         else:
             left_str = str(left_val)
             pattern_str = str(pattern_val)
 
-            # SQL LIKE -> regex
             regex = re.escape(pattern_str)
             regex = regex.replace("%", ".*").replace("_", ".")
             regex = f"^{regex}$"
@@ -1276,6 +1317,7 @@ def eval_atomic(expr: str, values: dict) -> dict:
             "reduced": reduced,
         }
 
+    # Standard comparison operators
     m = re.fullmatch(r"([a-zA-Z_]\w*)\s*(=|!=|>=|<=|>|<)\s*(.+)", expr)
     if not m:
         raise ValueError(f"Could not understand atomic condition: {expr}")
@@ -1287,30 +1329,26 @@ def eval_atomic(expr: str, values: dict) -> dict:
         raise ValueError(f"Missing value for variable: {left}")
 
     left_val = values[left]
-
-    if right in values:
-        right_val = values[right]
-    else:
-        right_val = parse_literal(right)
+    right_val = values[right] if right in values else parse_literal(right)
 
     if op == "=":
         result = left_val == right_val
-        reduced = f"{left_val} = {right_val}"
+        reduced = f"{format_value(left_val)} = {format_value(right_val)}"
     elif op == "!=":
         result = left_val != right_val
-        reduced = f"{left_val} != {right_val}"
+        reduced = f"{format_value(left_val)} != {format_value(right_val)}"
     elif op == ">":
         result = left_val > right_val
-        reduced = f"{left_val} > {right_val}"
+        reduced = f"{format_value(left_val)} > {format_value(right_val)}"
     elif op == "<":
         result = left_val < right_val
-        reduced = f"{left_val} < {right_val}"
+        reduced = f"{format_value(left_val)} < {format_value(right_val)}"
     elif op == ">=":
         result = left_val >= right_val
-        reduced = f"{left_val} >= {right_val}"
+        reduced = f"{format_value(left_val)} >= {format_value(right_val)}"
     elif op == "<=":
         result = left_val <= right_val
-        reduced = f"{left_val} <= {right_val}"
+        reduced = f"{format_value(left_val)} <= {format_value(right_val)}"
     else:
         raise ValueError(f"Unsupported operator: {op}")
 
@@ -1320,7 +1358,6 @@ def eval_atomic(expr: str, values: dict) -> dict:
         "rendered": format_bool_word(result),
         "reduced": reduced,
     }
-
 def normalize_condition_spacing(expr: str) -> str:
     return re.sub(r"\s+", " ", expr).strip()
 
