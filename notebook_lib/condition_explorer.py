@@ -784,6 +784,50 @@ def render_dataframe_table(
 # =========================================================
 # Parsing / evaluation helpers
 # =========================================================
+def get_step_result_for_table_mode(expr: str, evaluated_df: pd.DataFrame, values_text: str):
+    """
+    Use current values box when valid.
+    Otherwise fallback to first false row, else first row.
+    Returns: values, steps, result, new_values_text
+    """
+    try:
+        values = parse_values(values_text)
+        steps = []
+        result = evaluate(expr, values, steps, expr)
+        return values, steps, result, values_text
+    except Exception:
+        values = pick_step_values_from_evaluated_df(evaluated_df)
+        steps = []
+        result = evaluate(expr, values, steps, expr)
+        new_values_text = dataframe_row_to_values_text(
+            pd.Series(values),
+            include_columns=list(values.keys())
+        )
+        return values, steps, result, new_values_text
+
+
+def pick_step_values_from_evaluated_df(evaluated_df: pd.DataFrame) -> dict:
+    """
+    Pick the row used for the step-by-step section in table/sql mode.
+    Preference:
+    1. first false row
+    2. otherwise first row
+    """
+    if evaluated_df is None or evaluated_df.empty:
+        return {}
+
+    false_rows = evaluated_df[evaluated_df["condition_result"] == False]
+    if not false_rows.empty:
+        row = false_rows.iloc[0]
+    else:
+        row = evaluated_df.iloc[0]
+
+    return {
+        col: to_python_scalar(row[col])
+        for col in evaluated_df.columns
+        if col != "condition_result"
+    }
+
 
 def extract_next_expression(expr: str) -> tuple[str, str]:
     """
@@ -1260,7 +1304,6 @@ def make_row_dropdown(
     preview_columns: list[str] | None = None,
     max_rows: int = 8,
     rerun_callback=None,
-    source_mode_widget=None,
 ):
     if df is None or df.empty:
         return widgets.HTML("")
@@ -1300,11 +1343,9 @@ def make_row_dropdown(
     btn.add_class("ce-use-row")
 
     def on_click(_):
-      val_box.value = dropdown.value
-      if source_mode_widget is not None:
-          source_mode_widget.value = "values"
-      if rerun_callback:
-          rerun_callback(None)
+        val_box.value = dropdown.value
+        if rerun_callback:
+            rerun_callback(None)
 
     btn.on_click(on_click)
 
@@ -1496,7 +1537,7 @@ def make_condition_explorer(
     cond_label = widgets.HTML("""
     <div class="ce-field-block">
       <div class="ce-label">Condition</div>
-      <div class="ce-help">Example: rating IN (4, 5) OR (population IS NULL AND NOT featured = true) AND score &gt;= 8 OR name like 'A%')</div>
+      <div class="ce-help">Example: rating IN (4, 5) OR (population IS NULL AND NOT featured = true) AND score &gt;= 8 OR name like 'A%'</div>
     </div>
     """)
 
@@ -1511,7 +1552,7 @@ def make_condition_explorer(
     # inputs
     cond_box = widgets.Textarea(
         value=latest_condition if latest_condition else default_condition,
-        placeholder="rating = 5 OR (rating = 4 AND population > 1000000)",
+        placeholder="Type your condition, example: rating = 5 OR (rating = 4 AND population > 1000000)",
         layout=widgets.Layout(width="100%", height="90px")
     )
     cond_box.add_class("ce-condition-textarea")
@@ -1665,137 +1706,149 @@ def make_condition_explorer(
 
 
     def on_run(_):
-      try:
-          expr = cond_box.value.strip()
-          if not expr:
-              results_box.children = (widgets.HTML(render_error("Please type a condition first.")),)
-              return
+        try:
+            expr = cond_box.value.strip()
+            if not expr:
+                results_box.children = (widgets.HTML(render_error("Please type a condition first.")),)
+                return
 
-          append_condition_history(LOG_CONDITION_EXPLORER_FILE, explorer_id, expr)
-          recent_conditions_dropdown.options = [("Recent conditions", "")] + load_recent_conditions(
+            append_condition_history(LOG_CONDITION_EXPLORER_FILE, explorer_id, expr)
+            recent_conditions_dropdown.options = [("Recent conditions", "")] + load_recent_conditions(
                 LOG_CONDITION_EXPLORER_FILE, explorer_id, limit=12
             )
 
-          expr = normalize_boolean_keywords(expr)
+            expr = normalize_boolean_keywords(expr)
 
-          invalid_vars = detect_invalid_variables(expr)
-          if invalid_vars:
-              msg = (
-                  "Invalid variable names detected: "
-                  + ", ".join(invalid_vars)
-                  + "<br/><br/>"
-                  "⚠️ This explorer currently supports only simple variable names "
-                  "(e.g. <span class='ce-code'>rating</span>, <span class='ce-code'>population</span>).<br/>"
-                  "Do not use table-qualified names like "
-                  "<span class='ce-code'>s1.name</span>.<br/><br/>"
-                  "👉 Make variables unique instead (e.g. speaker1_name, speaker2_name)."
-              )
+            invalid_vars = detect_invalid_variables(expr)
+            if invalid_vars:
+                msg = (
+                    "Invalid variable names detected: "
+                    + ", ".join(invalid_vars)
+                    + "<br/><br/>"
+                    "⚠️ This explorer currently supports only simple variable names "
+                    "(e.g. <span class='ce-code'>rating</span>, <span class='ce-code'>population</span>).<br/>"
+                    "Do not use table-qualified names like "
+                    "<span class='ce-code'>s1.name</span>.<br/><br/>"
+                    "👉 Make variables unique instead (e.g. speaker1_name, speaker2_name)."
+                )
+                results_box.children = (widgets.HTML(render_error(msg, is_html=True)),)
+                return
 
-              results_box.children = (widgets.HTML(render_error(msg, is_html=True)),)
-              return
+            mode = source_mode.value
 
-          mode = source_mode.value
+            values = {}
+            steps = []
+            result = None
+            df_for_preview = None
+            evaluated_df = None
 
-          values = {}
-          steps = []
-          result = None
-          df_for_preview = None
-          evaluated_df = None
+            # ---- VALUES MODE ----
+            if mode == "values":
+                values = parse_values(val_box.value)
+                result = evaluate(expr, values, steps, expr)
 
-          # ---- VALUES MODE ----
-          if mode == "values":
-              values = parse_values(val_box.value)
-              result = evaluate(expr, values, steps, expr)
+            # ---- TABLE MODE ----
+            elif mode == "table":
+                if not duckdb_connection:
+                    raise ValueError("DuckDB connection not available.")
 
-          # ---- TABLE MODE ----
-          elif mode == "table":
-              if not duckdb_connection:
-                  raise ValueError("DuckDB connection not available.")
+                if not table_dropdown.value:
+                    raise ValueError("Please select a table.")
 
-              if not table_dropdown.value:
-                  raise ValueError("Please select a table.")
+                df_for_preview = duckdb_connection.execute(
+                    f"SELECT * FROM {table_dropdown.value}"
+                ).df()
 
-              df_for_preview = duckdb_connection.execute(
-                  f"SELECT * FROM {table_dropdown.value}"
-              ).df()
+                if preview_columns is not None:
+                    keep_cols = [c for c in preview_columns if c in df_for_preview.columns]
+                    df_for_preview = df_for_preview[keep_cols]
 
-              if preview_columns is not None:
-                  keep_cols = [c for c in preview_columns if c in df_for_preview.columns]
-                  df_for_preview = df_for_preview[keep_cols]
+                evaluated_df = evaluate_condition_on_dataframe(df_for_preview, expr)
 
-              evaluated_df = evaluate_condition_on_dataframe(df_for_preview, expr)
+                values, steps, result, new_values_text = get_step_result_for_table_mode(
+                    expr=expr,
+                    evaluated_df=evaluated_df,
+                    values_text=val_box.value,
+                )
+                val_box.value = new_values_text
 
-          # ---- SQL MODE ----
-          elif mode == "sql":
-              if not duckdb_connection:
-                  raise ValueError("DuckDB connection not available.")
+            # ---- SQL MODE ----
+            elif mode == "sql":
+                if not duckdb_connection:
+                    raise ValueError("DuckDB connection not available.")
 
-              query = sql_box.value.strip()
-              if not query:
-                  raise ValueError("Please write a SQL query.")
+                query = sql_box.value.strip()
+                if not query:
+                    raise ValueError("Please write a SQL query.")
 
-              df_for_preview = duckdb_connection.execute(query).df()
+                df_for_preview = duckdb_connection.execute(query).df()
 
-              if preview_columns is not None:
-                  keep_cols = [c for c in preview_columns if c in df_for_preview.columns]
-                  df_for_preview = df_for_preview[keep_cols]
+                if preview_columns is not None:
+                    keep_cols = [c for c in preview_columns if c in df_for_preview.columns]
+                    df_for_preview = df_for_preview[keep_cols]
 
-              evaluated_df = evaluate_condition_on_dataframe(df_for_preview, expr)
+                evaluated_df = evaluate_condition_on_dataframe(df_for_preview, expr)
 
-          sections = []
+                values, steps, result, new_values_text = get_step_result_for_table_mode(
+                    expr=expr,
+                    evaluated_df=evaluated_df,
+                    values_text=val_box.value,
+                )
+                val_box.value = new_values_text
 
-          # Step-by-step section only for manual input values mode
-          if mode == "values":
-              step_html = html_section(
-                  render_steps_section(
-                      steps=steps,
-                      final_value=result["value"],
-                      values=values,
-                  )
-              )
-              sections.append(
-                  make_collapsible_section(
-                      "Step-by-step evaluation",
-                      step_html,
-                      expanded=True
-                  )
-              )
+            sections = []
 
-          # Table results section for table/sql mode
-          if evaluated_df is not None:
-              all_rows_html = html_section(
-                  render_all_rows_section(
-                      evaluated_df=evaluated_df,
-                      max_rows=max_preview_rows
-                  )
-              )
+            # In all modes, show step-by-step if we have a result
+            if result is not None:
+                step_html = html_section(
+                    render_steps_section(
+                        steps=steps,
+                        final_value=result["value"],
+                        values=values,
+                    )
+                )
+                sections.append(
+                    make_collapsible_section(
+                        "Step-by-step evaluation",
+                        step_html,
+                        expanded=True
+                    )
+                )
 
-              row_dropdown = make_row_dropdown(
-                  evaluated_df,
-                  val_box,
-                  preview_columns=preview_columns,
-                  max_rows=max_preview_rows,
-                  rerun_callback=on_run,
-                  source_mode_widget=source_mode,
-              )
+            # In table/sql mode, also show the table preview
+            if evaluated_df is not None:
+                all_rows_html = html_section(
+                    render_all_rows_section(
+                        evaluated_df=evaluated_df,
+                        max_rows=max_preview_rows
+                    )
+                )
 
-              combined = widgets.VBox(
-                  [all_rows_html, row_dropdown],
-                  layout=widgets.Layout(width="100%"),
-              )
+                row_dropdown = make_row_dropdown(
+                    evaluated_df,
+                    val_box,
+                    preview_columns=preview_columns,
+                    max_rows=max_preview_rows,
+                    rerun_callback=on_run,
+                )
 
-              sections.append(
-                  make_collapsible_section(
-                      "All rows with match result",
-                      combined,
-                      expanded=True
-                  )
-              )
+                combined = widgets.VBox(
+                    [all_rows_html, row_dropdown],
+                    layout=widgets.Layout(width="100%"),
+                )
 
-          results_box.children = tuple(sections)
+                sections.append(
+                    make_collapsible_section(
+                        "All rows with match result",
+                        combined,
+                        expanded=True
+                    )
+                )
 
-      except Exception as e:
-          results_box.children = (widgets.HTML(render_error(str(e))),)
+            results_box.children = tuple(sections)
+
+        except Exception as e:
+            results_box.children = (widgets.HTML(render_error(str(e))),)
 
     run_btn.on_click(on_run)
 
