@@ -1314,35 +1314,18 @@ def eval_atomic(expr: str, values: dict) -> dict:
 
 
 def evaluate(expr: str, values: dict, steps: list, original_expr: str | None = None) -> dict:
-    expr = strip_outer_parens(expr.strip())
+    expr = expr.strip()
+    stripped = strip_outer_parens(expr)
 
     if original_expr is None:
-        original_expr = expr
+        original_expr = stripped
 
-    # NOT
-    if expr.upper().startswith("NOT "):
-        after_not = expr[4:].strip()
-        evaluated = evaluate(after_not, values, steps, after_not)
-        result = not evaluated["value"]
-
-        steps.append({
-            "expr": original_expr.strip(),
-            "reduced": f"NOT {evaluated['rendered']}",
-            "value": result,
-        })
-
-        return {
-            "expr": original_expr.strip(),
-            "value": result,
-            "rendered": format_bool_word(result),
-        }
-
-    # OR
-    parts = split_top_level(expr, "OR")
+    # OR (lowest precedence)
+    parts = split_top_level(stripped, " OR ")
     if len(parts) > 1:
-        evaluated = [evaluate(p, values, steps, p) for p in parts]
-        reduced = " OR ".join(part["rendered"] for part in evaluated)
-        result = any(part["value"] for part in evaluated)
+        evaluated_parts = [evaluate(p, values, steps, p) for p in parts]
+        reduced = " OR ".join(part["rendered"] for part in evaluated_parts)
+        result = any(part["value"] for part in evaluated_parts)
 
         steps.append({
             "expr": original_expr.strip(),
@@ -1357,11 +1340,11 @@ def evaluate(expr: str, values: dict, steps: list, original_expr: str | None = N
         }
 
     # AND
-    parts = split_top_level(expr, "AND")
+    parts = split_top_level(stripped, " AND ")
     if len(parts) > 1:
-        evaluated = [evaluate(p, values, steps, p) for p in parts]
-        reduced = " AND ".join(part["rendered"] for part in evaluated)
-        result = all(part["value"] for part in evaluated)
+        evaluated_parts = [evaluate(p, values, steps, p) for p in parts]
+        reduced = " AND ".join(part["rendered"] for part in evaluated_parts)
+        result = all(part["value"] for part in evaluated_parts)
 
         steps.append({
             "expr": original_expr.strip(),
@@ -1375,15 +1358,32 @@ def evaluate(expr: str, values: dict, steps: list, original_expr: str | None = N
             "rendered": format_bool_word(result),
         }
 
+    # NOT
+    if stripped.upper().startswith("NOT "):
+        inner_expr = stripped[4:].strip()
+        evaluated_inner = evaluate(inner_expr, values, steps, inner_expr)
+        result = not evaluated_inner["value"]
+
+        steps.append({
+            "expr": original_expr.strip(),
+            "reduced": f"NOT {evaluated_inner['rendered']}",
+            "value": result,
+        })
+
+        return {
+            "expr": original_expr.strip(),
+            "value": result,
+            "rendered": format_bool_word(result),
+        }
+
     # atomic
-    atom = eval_atomic(expr, values)
+    atom = eval_atomic(stripped, values)
     steps.append({
         "expr": atom["expr"],
         "reduced": atom["reduced"],
         "value": atom["value"],
     })
     return atom
-
 
 def build_balanced_preview(df: pd.DataFrame, max_rows: int = 12) -> pd.DataFrame:
     if df is None or df.empty:
