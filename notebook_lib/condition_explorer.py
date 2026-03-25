@@ -1605,7 +1605,6 @@ def make_condition_explorer(
     values_label = widgets.HTML("""
     <div class="ce-field-block">
       <div class="ce-label">Values</div>
-      <div class="ce-help">Write one variable per line, for example: rating = 5</div>
     </div>
     """)
 
@@ -1625,7 +1624,7 @@ def make_condition_explorer(
 
     val_box = widgets.Textarea(
         value=initial_values_text,
-        placeholder="rating = 5\npopulation = 1000001",
+        placeholder="Write one vairable per line, for example: rating = 5",
         layout=widgets.Layout(width="100%", height="110px")
     )
     val_box.add_class("ce-values-textarea")
