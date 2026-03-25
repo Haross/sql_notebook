@@ -979,27 +979,94 @@ def normalize_boolean_keywords(expr: str) -> str:
 
 
 def split_top_level(expr: str, op: str) -> list[str]:
+    """
+    Split an expression by top-level AND / OR, ignoring:
+    - nested parentheses
+    - strings
+    - the AND that belongs to BETWEEN ... AND ...
+    """
     expr = expr.strip()
+    target = op.upper()
+
     parts = []
     depth = 0
     start = 0
     i = 0
+    in_single = False
+    in_double = False
+    between_pending_and = False
 
     while i < len(expr):
         ch = expr[i]
+
+        # quoted strings
+        if in_single:
+            if ch == "'" and (i == 0 or expr[i - 1] != "\\"):
+                in_single = False
+            i += 1
+            continue
+
+        if in_double:
+            if ch == '"' and (i == 0 or expr[i - 1] != "\\"):
+                in_double = False
+            i += 1
+            continue
+
+        if ch == "'":
+            in_single = True
+            i += 1
+            continue
+
+        if ch == '"':
+            in_double = True
+            i += 1
+            continue
+
+        # parentheses
         if ch == "(":
             depth += 1
-        elif ch == ")":
+            i += 1
+            continue
+
+        if ch == ")":
             depth -= 1
-        elif depth == 0 and expr[i:i + len(op)] == op:
-            parts.append(expr[start:i].strip())
-            start = i + len(op)
-            i += len(op) - 1
+            i += 1
+            continue
+
+        # only inspect keywords at top level
+        if depth == 0 and (ch.isalpha() or ch == "_"):
+            j = i
+            while j < len(expr) and (expr[j].isalnum() or expr[j] == "_"):
+                j += 1
+
+            word = expr[i:j].upper()
+
+            # BETWEEN marks that the next AND is not a boolean AND
+            if word == "BETWEEN":
+                between_pending_and = True
+                i = j
+                continue
+
+            # ignore the AND belonging to BETWEEN
+            if word == "AND" and between_pending_and:
+                between_pending_and = False
+                i = j
+                continue
+
+            # normal top-level operator split
+            if word == target:
+                parts.append(expr[start:i].strip())
+                start = j
+                i = j
+                continue
+
+            i = j
+            continue
+
         i += 1
 
     parts.append(expr[start:].strip())
     return parts
-
 
 def strip_outer_parens(expr: str) -> str:
     expr = expr.strip()
@@ -1032,6 +1099,12 @@ def parse_literal(raw: str):
     if raw.lower() == "null":
         return None
 
+    if raw.lower() == "true":
+        return True
+
+    if raw.lower() == "false":
+        return False
+
     if re.fullmatch(r"-?\d+", raw):
         return int(raw)
 
@@ -1040,12 +1113,6 @@ def parse_literal(raw: str):
 
     if (raw.startswith("'") and raw.endswith("'")) or (raw.startswith('"') and raw.endswith('"')):
         return raw[1:-1]
-
-    if raw.lower() == "true":
-        return True
-
-    if raw.lower() == "false":
-        return False
 
     return raw
 
@@ -1093,6 +1160,10 @@ def eval_atomic(expr: str, values: dict) -> dict:
     if m_between:
         left, low_raw, high_raw = m_between.groups()
 
+        left = left.strip()
+        low_raw = low_raw.strip()
+        high_raw = high_raw.strip()
+
         if left not in values:
             raise ValueError(f"Missing value for variable: {left}")
 
@@ -1100,8 +1171,12 @@ def eval_atomic(expr: str, values: dict) -> dict:
         low_val = values[low_raw] if low_raw in values else parse_literal(low_raw)
         high_val = values[high_raw] if high_raw in values else parse_literal(high_raw)
 
-        result = low_val <= left_val <= high_val
-        reduced = f"{low_val} <= {left_val} <= {high_val}"
+        if low_val is None or high_val is None or left_val is None:
+            result = False
+            reduced = f"{format_value(low_val)} <= {format_value(left_val)} <= {format_value(high_val)}"
+        else:
+            result = low_val <= left_val <= high_val
+            reduced = f"{format_value(low_val)} <= {format_value(left_val)} <= {format_value(high_val)}"
 
         return {
             "expr": expr,
@@ -1239,40 +1314,31 @@ def eval_atomic(expr: str, values: dict) -> dict:
 
 
 def evaluate(expr: str, values: dict, steps: list, original_expr: str | None = None) -> dict:
-    expr = expr.strip()
+    expr = strip_outer_parens(expr.strip())
+
     if original_expr is None:
         original_expr = expr
 
-    stripped = strip_outer_parens(expr)
-
     # NOT
-    if stripped.upper().startswith("NOT "):
-        after_not = stripped[4:].strip()
-
-        first_expr, rest = extract_next_expression(after_not)
-
-        evaluated = evaluate(first_expr, values, steps, first_expr)
-        not_value = not evaluated["value"]
-
-        # If there's more (e.g. AND / OR), rebuild expression
-        if rest:
-            new_expr = f"{format_bool_word(not_value)} {rest}"
-            return evaluate(new_expr, values, steps, original_expr)
+    if expr.upper().startswith("NOT "):
+        after_not = expr[4:].strip()
+        evaluated = evaluate(after_not, values, steps, after_not)
+        result = not evaluated["value"]
 
         steps.append({
             "expr": original_expr.strip(),
             "reduced": f"NOT {evaluated['rendered']}",
-            "value": not_value,
+            "value": result,
         })
 
         return {
             "expr": original_expr.strip(),
-            "value": not_value,
-            "rendered": format_bool_word(not_value),
+            "value": result,
+            "rendered": format_bool_word(result),
         }
 
     # OR
-    parts = split_top_level(stripped, " OR ")
+    parts = split_top_level(expr, "OR")
     if len(parts) > 1:
         evaluated = [evaluate(p, values, steps, p) for p in parts]
         reduced = " OR ".join(part["rendered"] for part in evaluated)
@@ -1291,7 +1357,7 @@ def evaluate(expr: str, values: dict, steps: list, original_expr: str | None = N
         }
 
     # AND
-    parts = split_top_level(stripped, " AND ")
+    parts = split_top_level(expr, "AND")
     if len(parts) > 1:
         evaluated = [evaluate(p, values, steps, p) for p in parts]
         reduced = " AND ".join(part["rendered"] for part in evaluated)
@@ -1310,13 +1376,14 @@ def evaluate(expr: str, values: dict, steps: list, original_expr: str | None = N
         }
 
     # atomic
-    atom = eval_atomic(stripped, values)
+    atom = eval_atomic(expr, values)
     steps.append({
         "expr": atom["expr"],
         "reduced": atom["reduced"],
         "value": atom["value"],
     })
     return atom
+
 
 def build_balanced_preview(df: pd.DataFrame, max_rows: int = 12) -> pd.DataFrame:
     if df is None or df.empty:
@@ -1629,12 +1696,18 @@ def make_condition_explorer(
     )
     val_box.add_class("ce-values-textarea")
 
+    source_options = [("Input values", "values")]
+
+    if duckdb_connection is not None:
+        source_options.append(("DB table", "table"))
+    elif table_df is not None:
+        source_options.append(("DataFrame table", "table"))
+
+    if duckdb_connection is not None:
+        source_options.append(("SQL query", "sql"))
+
     source_mode = widgets.Dropdown(
-        options=[
-            ("Input values", "values"),
-            ("DuckDB table", "table"),
-            ("SQL query", "sql"),
-        ],
+        options=source_options,
         description="Source:",
         layout=widgets.Layout(width="300px"),
     )
@@ -1715,13 +1788,22 @@ def make_condition_explorer(
         layout=widgets.Layout(width="300px"),
     )
 
+    table_container_children = []
+    if duckdb_connection is not None:
+        table_container_children.append(table_dropdown)
+    elif table_df is not None:
+        table_container_children.append(
+            widgets.HTML("<div class='ce-small'>Using provided dataframe table.</div>")
+        )
+
+    table_container = widgets.VBox(table_container_children)
+
     sql_box = widgets.Textarea(
         placeholder="SELECT rating, population FROM cities",
         layout=widgets.Layout(width="100%", height="90px")
     )
 
     values_container = widgets.VBox([values_label, val_box])
-    table_container = widgets.VBox([table_dropdown])
     sql_container = widgets.VBox([sql_box])
 
 
@@ -1812,17 +1894,32 @@ def make_condition_explorer(
                 values = parse_values(val_box.value)
                 result = evaluate(expr, values, steps, expr)
 
+                # also show table preview if a dataframe was passed in
+                if table_df is not None:
+                    df_for_preview = table_df.copy()
+
+                    if preview_columns is not None:
+                        keep_cols = [c for c in preview_columns if c in df_for_preview.columns]
+                        df_for_preview = df_for_preview[keep_cols]
+
+                    evaluated_df = evaluate_condition_on_dataframe(df_for_preview, expr)
+
+
             # ---- TABLE MODE ----
             elif mode == "table":
-                if not duckdb_connection:
-                    raise ValueError("DuckDB connection not available.")
+                if duckdb_connection is not None:
+                    if not table_dropdown.value:
+                        raise ValueError("Please select a table.")
 
-                if not table_dropdown.value:
-                    raise ValueError("Please select a table.")
+                    df_for_preview = duckdb_connection.execute(
+                        f"SELECT * FROM {table_dropdown.value}"
+                    ).df()
 
-                df_for_preview = duckdb_connection.execute(
-                    f"SELECT * FROM {table_dropdown.value}"
-                ).df()
+                elif table_df is not None:
+                    df_for_preview = table_df.copy()
+
+                else:
+                    raise ValueError("No table available.")
 
                 if preview_columns is not None:
                     keep_cols = [c for c in preview_columns if c in df_for_preview.columns]
