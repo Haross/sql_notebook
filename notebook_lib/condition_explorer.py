@@ -866,7 +866,7 @@ def extract_variables_from_condition(expr: str) -> list[str]:
     candidates = re.findall(r"\b[a-zA-Z_]\w*(?:\.[a-zA-Z_]\w*)?\b", expr_wo_strings)
 
     reserved = {
-        "AND", "OR", "TRUE", "FALSE", "NULL"
+        "AND", "OR", "TRUE", "FALSE", "NULL", "LIKE", "BETWEEN"
     }
 
     variables = []
