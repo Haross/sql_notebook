@@ -15,6 +15,8 @@ from pathlib import Path
 import csv
 from datetime import datetime
 
+import markdown
+
 def normalize_condition_for_dropdown(condition: str) -> str:
     return " ".join((condition or "").split())
 
@@ -792,6 +794,32 @@ def render_dataframe_table(
     {note}
     """
 
+def build_default_values_text(
+    default_values: str = "",
+    default_variables: list[str] | None = None,
+) -> str:
+    existing = parse_values_loose(default_values)
+    lines = []
+
+    seen = set()
+
+    for var in (default_variables or []):
+        var = var.strip()
+        if not var or var in seen:
+            continue
+        seen.add(var)
+
+        if var in existing:
+            lines.append(f"{var} = {existing[var]}")
+        else:
+            lines.append(f"{var} = ")
+
+    for var, value in existing.items():
+        if var in seen:
+            continue
+        lines.append(f"{var} = {value}")
+
+    return "\n".join(lines)
 
 # =========================================================
 # Parsing / evaluation helpers
@@ -1001,6 +1029,9 @@ def strip_outer_parens(expr: str) -> str:
 def parse_literal(raw: str):
     raw = raw.strip()
 
+    if raw.lower() == "null":
+        return None
+
     if re.fullmatch(r"-?\d+", raw):
         return int(raw)
 
@@ -1045,6 +1076,11 @@ def format_bool_word(v: bool) -> str:
     return "True" if v else "False"
 
 
+def format_value(v):
+    if v is None:
+        return "NULL"
+    return str(v)
+    
 def eval_atomic(expr: str, values: dict) -> dict:
     expr = expr.strip()
 
@@ -1107,7 +1143,10 @@ def eval_atomic(expr: str, values: dict) -> dict:
         is_null = val is None
         result = not is_null if not_part else is_null
 
-        reduced = f"{val} IS {'NOT ' if not_part else ''}NULL"
+        val_str = format_value(val)
+
+        reduced = f"{val_str} IS {'NOT ' if not_part else ''}NULL"
+
 
         return {
             "expr": expr,
@@ -1531,6 +1570,7 @@ def render_error(message: str, *, is_html: bool = False) -> str:
 def make_condition_explorer(
     default_condition: str = "",
     default_values: str = "",
+    default_variables: list[str] | None = None,
     title: str = "ℹ️ Condition evaluator",
     subtitle: str = (
         "Type a condition and some input values, then evaluate the logic step by step."
@@ -1547,10 +1587,11 @@ def make_condition_explorer(
     inject_condition_css_once()
 
     # top info card
+    subtitle_html = markdown.markdown(subtitle)
     intro = widgets.HTML(f"""
     <div class="ce-input-box">
-      <div class="ce-title">{_html.escape(title)}</div>
-      <div class="ce-subtitle">{_html.escape(subtitle)}</div>
+    <div class="ce-title">{_html.escape(title)}</div>
+    <div class="ce-subtitle">{subtitle_html}</div>
     </div>
     """)
 
@@ -1558,7 +1599,6 @@ def make_condition_explorer(
     cond_label = widgets.HTML("""
     <div class="ce-field-block">
       <div class="ce-label">Condition</div>
-      <div class="ce-help">Example: rating IN (4, 5) OR (population IS NULL AND NOT featured = true) AND score &gt;= 8 OR name like 'A%'</div>
     </div>
     """)
 
@@ -1570,16 +1610,21 @@ def make_condition_explorer(
     """)
 
     latest_condition = load_latest_condition(LOG_CONDITION_EXPLORER_FILE, explorer_id)
-    # inputs
+    # inputs nu
     cond_box = widgets.Textarea(
         value=latest_condition if latest_condition else default_condition,
-        placeholder="Type your condition, example: rating = 5 OR (rating = 4 AND population > 1000000)",
+        placeholder="Type your condition, Example: rating IN (4, 5) OR (population IS NULL AND NOT featured = true) AND score >= 8 OR name like 'A%",
         layout=widgets.Layout(width="100%", height="90px")
     )
     cond_box.add_class("ce-condition-textarea")
 
+    initial_values_text = build_default_values_text(
+        default_values=default_values,
+        default_variables=default_variables,
+    )
+
     val_box = widgets.Textarea(
-        value=default_values,
+        value=initial_values_text,
         placeholder="rating = 5\npopulation = 1000001",
         layout=widgets.Layout(width="100%", height="110px")
     )
