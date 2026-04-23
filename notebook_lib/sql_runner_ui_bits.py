@@ -616,7 +616,9 @@ def render_submit_banner(
 
     hint_html = ""
     if hint:
-        hint_html = f"<div class='hint'><b>Next hint:</b> {_html.escape(hint)}</div>"
+      safe_hint = _html.escape(hint).replace("\n", "<br>")
+      hint_html = f"<div class='hint'><b>Next hint:</b> {safe_hint}</div>"
+
 
     # score_line is expected to be safe HTML you created (numbers + tags),
     # meta_line is plain text or already escaped before passing in
